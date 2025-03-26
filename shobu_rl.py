@@ -142,7 +142,8 @@ class Shobu_RL(Shobu):
             pfrom = (px*8) + py 
             pidx = (pfrom * (8 * 2)) + (pd * 2) + (ps-1)
             mask[pidx] = 1
-        return logits + torch.log(mask.float() + 1e-10), mask
+        logits[mask == 0] = float('-inf')
+        return logits, mask
     
     
     def mask_aggressive_logits(self, logits, passive_move, valid_moves):
@@ -153,7 +154,8 @@ class Shobu_RL(Shobu):
                 (ax, ay)= move[1]
                 adix = (ax*8) + ay 
                 mask[adix] = 1
-        return logits + torch.log(mask.float() + 1e-10), mask
+        logits[mask == 0] = float('-inf')
+        return logits, mask
     
         
     def sample_passive(self, policy_output, valid_moves):
