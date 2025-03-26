@@ -32,7 +32,7 @@ DIRECTION_IDX_MAPPING = {
 
 
 Transition = namedtuple('Transition',
-                        ('state', 'passive', 'aggressive', 'passive_probs','aggressive_probs', 'advantages', 'returns'))
+                        ('state', 'passive', 'aggressive', 'passive_probs','aggressive_probs', 'passive_mask', 'aggressive_mask', 'advantages', 'returns'))
 
 
 class ReplayMemory(object):
