@@ -4,8 +4,8 @@ import numpy as np
 one = np.uint64(1)
 
 # Rank and file masks
-_rank_masks = [np.uint64(0xFF) << i * 8 for i in range(8)]
-_file_masks = [np.uint64(0x0101010101010101) << i for i in range(8)]
+_rank_masks = [np.uint64(0xFF) << np.uint64(i * 8) for i in range(8)]
+_file_masks = [np.uint64(0x0101010101010101) << np.uint64(i) for i in range(8)]
 _n_mask = ~(_rank_masks[3] | _rank_masks[7])
 _e_mask = ~(_file_masks[3] | _file_masks[7])
 _s_mask = ~(_rank_masks[0] | _rank_masks[4])
@@ -13,27 +13,27 @@ _w_mask = ~(_file_masks[0] | _file_masks[4])
 
 # Sub-board masks for each of the 4 sub-boards
 _upper_left_mask = np.uint64(0x0F0F0F0F00000000)
-_upper_right_mask = _upper_left_mask << 4
-_bottom_left_mask = _upper_left_mask >> 32
-_bottom_right_mask = _bottom_left_mask << 4
+_upper_right_mask = _upper_left_mask << np.uint64(4)
+_bottom_left_mask = _upper_left_mask >> np.uint64(32)
+_bottom_right_mask = _bottom_left_mask << np.uint64(4)
 _left_mask = _upper_left_mask | _bottom_left_mask
 _right_mask = _upper_right_mask | _bottom_right_mask
 
 
 def shift_N(board: np.uint64) -> np.uint64:
-	return (board & _n_mask) << 8
+	return (board & _n_mask) << np.uint64(8)
 
 
 def shift_E(board: np.uint64) -> np.uint64:
-	return (board & _e_mask) << 1
+	return (board & _e_mask) << np.uint64(1)
 
 
 def shift_S(board: np.uint64) -> np.uint64:
-	return (board & _s_mask) >> 8
+	return (board & _s_mask) >> np.uint64(8)
 
 
 def shift_W(board: np.uint64) -> np.uint64:
-	return (board & _w_mask) >> 1
+	return (board & _w_mask) >> np.uint64(1)
 
 
 def shift_NE(board: np.uint64) -> np.uint64:
@@ -91,9 +91,10 @@ def bit_reverse(x: np.uint64) -> np.uint64:
 	:return: the results of the reverse
 	"""
 	for i in range(32):
-		j = 63 - i
-		z = ((x >> i) ^ (x >> j)) & one
-		x ^= (z << i) | (z << j)
+		j = np.uint64(63 - i)
+		k = np.uint64(i)
+		z = ((x >> k) ^ (x >> j)) & one
+		x ^= (z << k) | (z << j)
 	return x
 
 
@@ -102,7 +103,7 @@ def _pick(x: np.uint64) -> tuple[int, np.uint64]:
 	'Pick' the LSB out of x, returning (index of LSB, x with this bit unset)
 	"""
 	idx = _ilsb(x)
-	return idx, x & ~(one << idx)
+	return idx, x & ~(one << np.uint64(idx))
 
 
 def _idx_to_coord(idx: int) -> tuple[int, int]:

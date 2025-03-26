@@ -315,11 +315,11 @@ class Shobu:
 		:param move: The move to check legality for
 		:return: true if the move is legal, false otherwise
 		"""
-		passive_piece = move.passive_from.y * 8 + move.passive_from.x
-		aggressive_piece = move.aggressive_from.y * 8 + move.aggressive_from.x
+		passive_piece: np.uint64 = np.uint64(move.passive_from.y * 8 + move.passive_from.x)
+		aggressive_piece: np.uint64 = np.uint64(move.aggressive_from.y * 8 + move.aggressive_from.x)
 
-		passive_piece: np.uint64 = one << passive_piece
-		aggressive_piece: np.uint64 = one << aggressive_piece
+		passive_piece = one << passive_piece
+		aggressive_piece = one << aggressive_piece
 
 		if bottom_right(passive_piece):
 			aggressive_piece = left(aggressive_piece)
@@ -401,10 +401,10 @@ class Shobu:
 		"""
 		mover_pieces = self.black if self.next_mover == Player.BLACK else self.white
 		other_pieces = self.black if self.next_mover == Player.WHITE else self.white
-		passive_piece = move.passive_from.y * 8 + move.passive_from.x
-		aggressive_piece = move.aggressive_from.y * 8 + move.aggressive_from.x
-		passive_piece: np.uint64 = one << passive_piece
-		aggressive_piece: np.uint64 = one << aggressive_piece
+		passive_piece = np.uint64(move.passive_from.y * 8 + move.passive_from.x)
+		aggressive_piece = np.uint64(move.aggressive_from.y * 8 + move.aggressive_from.x)
+		passive_piece = one << passive_piece
+		aggressive_piece = one << aggressive_piece
 		fwd, _ = move.direction.value
 
 		for _ in range(move.steps):
@@ -470,6 +470,9 @@ class Shobu:
 
 		return None
 
+	def as_matrix(self) -> np.ndarray:
+		...
+
 	def flip(self):
 		"""
 		Rotate the board by 180 degrees and swap out all black pieces for white,
@@ -517,9 +520,9 @@ class Shobu:
 			y = 7 - (i // 8)
 			idx = y*8 + x
 			if p == 'b':
-				black |= np.uint64(1) << idx
+				black |= np.uint64(1) << np.uint64(idx)
 			elif p == 'w':
-				white |= np.uint64(1) << idx
+				white |= np.uint64(1) << np.uint64(idx)
 
 		return Shobu(black, white, next_mover)
 
