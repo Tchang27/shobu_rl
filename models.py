@@ -5,8 +5,8 @@ import torch.nn.functional as F
 class ResidualBlock2D(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ResidualBlock2D, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=4, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=4, stride=1, padding=1)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.bn2 = nn.BatchNorm2d(out_channels)
         
@@ -48,19 +48,19 @@ class Shobu_PPO(nn.Module):
         # Input shape: (batch_size, num_boards, board_size, board_size)
         self.input_channels = num_boards
         
-        self.conv1 = nn.Conv2d(self.input_channels, 16, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(self.input_channels, 16, kernel_size=4, stride=1, padding=1)
         self.bn1 = nn.BatchNorm2d(16)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=1)
         
         self.residual1 = ResidualBlock2D(16, 16)
         
-        self.conv2 = nn.Conv2d(16, 64, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(16, 64, kernel_size=4, stride=1, padding=1)
         self.bn2 = nn.BatchNorm2d(64)
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=1)
         
         self.residual2 = ResidualBlock2D(64, 64)
         
-        self.conv3 = nn.Conv2d(64, 256, kernel_size=1, stride=1)
+        self.conv3 = nn.Conv2d(64, 256, kernel_size=2, stride=1)
         self.bn3 = nn.BatchNorm2d(256)
         self.pool3 = nn.AdaptiveAvgPool2d(1)  # Global average pooling
         

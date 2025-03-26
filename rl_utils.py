@@ -171,8 +171,8 @@ def plot_progress(reward_list, loss_list, win_list, plot_every: int, episode: in
     ax1.set_ylabel("Return", color="tab:blue")
     ax1.plot(reward_list, label="Raw Batch Return", alpha=0.2, color="tab:blue")
 
-#     smoothed_rewards = moving_average(reward_list, window_size=(plot_every//10))
-#     ax1.plot(range(len(smoothed_rewards)), smoothed_rewards, label="Smoothed Batch Return", color="blue", linewidth=5)
+    smoothed_rewards = moving_average(reward_list, window_size=(plot_every//10))
+    ax1.plot(range(len(smoothed_rewards)), smoothed_rewards, label="Smoothed Batch Return", color="blue", linewidth=5)
 
     ax1.tick_params(axis="y", labelcolor="tab:blue")
 
@@ -181,13 +181,13 @@ def plot_progress(reward_list, loss_list, win_list, plot_every: int, episode: in
     ax2.set_ylabel("Loss", color="tab:red")  
     ax2.plot(loss_list, label=" Raw Batch Loss", alpha=0.2, color="tab:red")
 
-#     smoothed_loss = moving_average(loss_list, window_size=(plot_every//10))
-#     ax2.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Loss", color="red", linewidth=5)
+    smoothed_loss = moving_average(loss_list, window_size=(plot_every//10))
+    ax2.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Loss", color="red", linewidth=5)
 
     ax2.tick_params(axis="y", labelcolor="tab:red")
 
     # Plot win rate for player 0
-    fig2, ax3 = plt.subplots(figsize=(6, 4))
+    fig2, ax3 = plt.subplots(figsize=(12, 8))
     ax3.set_xlabel("Episode")
     ax3.spines["right"].set_position(("outward", 60))  # Move win rate axis outward
     ax3.set_ylabel(f"Rolling Win Rate (Last {plot_every})", color="tab:green")

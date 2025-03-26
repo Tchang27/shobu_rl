@@ -13,7 +13,7 @@ from itertools import combinations
 
 # hyperparameters
 # training parameters
-MAX_TURNS = 60
+MAX_TURNS = 100
 MAX_GAMES = 50000
 BATCH_SIZE = 256
 EPOCHS = 4
@@ -50,10 +50,9 @@ class Shobu_RL(Shobu):
         self.set_model(ppo_model)
         # steps throughout training
         self.train_steps = 0
-        # player color - always plays as black
-        self.player_color = Player.BLACK
         # init game
         self.init_game()
+        
 
         
     def init_game(self):
@@ -61,6 +60,11 @@ class Shobu_RL(Shobu):
         self.steps_done = 0
         # Shobu board
         self.board = Shobu.starting_position()
+        # current player
+        self.model_player = random.choice([-1, 1])
+        self.player_color = Player.BLACK if self.model_player==-1 else Player.WHITE
+        # always start with black
+        self.cur_turn = -1
 
 
     def set_model(self, ppo_model) -> None:
@@ -237,7 +241,7 @@ class Shobu_RL(Shobu):
         # train
         if train:
             # PPO moves
-            if self.board.next_mover == self.player_color:  
+            if self.cur_turn == self.model_player:
                 self.train_steps += 1
                 self.steps_done += 1 
                 with torch.no_grad():
@@ -266,14 +270,9 @@ class Shobu_RL(Shobu):
         # select opponents
         if train:
             self.opp = random.choice(self.opponent_pool)
-            
+          
+        print(f"The model is: {self.player_color}")
         while (self.steps_done < MAX_TURNS):    
-            # check for wincon
-            if (winner := self.board.check_winner()) is not None:
-                print(f"The winner is {winner}.")
-                return memory
-            
-            ### TODO: get board_state as matrix rep
             board_state = self.board.as_matrix()
             
             # get input move by sampling from policy model
@@ -281,12 +280,24 @@ class Shobu_RL(Shobu):
             move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.select_action(start_state)
             
             # push to memory if player is the trainable model
-            if self.board.next_mover == Player.BLACK:
+            if self.cur_turn == self.model_player:
                 memory.push(start_state, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask, 0, 0)
                         
             # apply move
             self.board = self.board.apply(move)
+            
+            # check for wincon
+            if (winner := self.board.check_winner()) is not None:
+                if self.cur_turn == -1:
+                    print(f"The winner is black.")
+                else:
+                    print(f"The winner is white.")
+                return memory
+            
+            # flip board
             self.board.flip()
+            # next turn
+            self.cur_turn *= -1
         return memory   
 
     def train(self, opt, scheduler, sparse=True):
@@ -331,7 +342,7 @@ class Shobu_RL(Shobu):
                 else:
                     rewards = [intermediate_reward(s, self.player_color) for s in state_batch]
                 # win/loss reward
-                rewards[-1] += WIN_REWARD if (self.board.check_winner()==self.player_color) else -WIN_REWARD
+                rewards[-1] += WIN_REWARD if (self.board.check_winner() and (self.cur_turn==self.model_player)) else -WIN_REWARD
                 # compute returns + advantages
                 returns, advantages = compute_returns(q_values, rewards)  
                 advantages = torch.cat(advantages)
@@ -345,7 +356,7 @@ class Shobu_RL(Shobu):
                 train_memory.push(*transition) 
          
             # record winner every episode
-            win_list.append(1 if (self.board.check_winner()==self.player_color) else 0)
+            win_list.append(1 if (self.board.check_winner() and (self.cur_turn==self.model_player)) else 0)
             
             # training step every ON_POLICY episodes
             if ((episode+1) % ON_POLICY) == 0:
