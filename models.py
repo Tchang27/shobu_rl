@@ -5,8 +5,8 @@ import torch.nn.functional as F
 class ResidualBlock2D(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ResidualBlock2D, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=4, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=4, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.bn2 = nn.BatchNorm2d(out_channels)
         
