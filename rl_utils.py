@@ -96,7 +96,7 @@ def convert_to_ShobuMove(passive_move, aggressive_move):
     return ShobuMove(passive_from, aggressive_from, direction, distance)
 
     
-def compute_returns(rewards, values, gamma=0.99, lam=0.95) -> list[list, list]:
+def compute_returns(rewards, values, device, gamma=0.99, lam=0.95) -> list[list, list]:
     """
     Compute returns and advantages using Generalized Advantage Estimation (GAE).
     """
@@ -116,11 +116,16 @@ def compute_returns(rewards, values, gamma=0.99, lam=0.95) -> list[list, list]:
 
         # GAE calculation
         gae = delta + gamma * lam * gae
-
         # Return is the advantage + value estimate, used for vaue function loss
         return_t = gae + values[t]
         returns.insert(0, return_t)  # Insert at the beginning for reverse order
         advantages.insert(0, gae)
+        
+    advantages = torch.tensor(advantages, device=device, dtype=torch.float32).squeeze()
+    advantages = (advantages - torch.mean(advantages)) / (torch.std(advantages) + 1e-8)
+
+    returns = torch.tensor(returns, device=device, dtype=torch.float32).squeeze()
+    returns = (returns - torch.mean(returns)) / (torch.std(returns) + 1e-8)
 
     return returns, advantages
       
@@ -137,7 +142,7 @@ def intermediate_reward(state, player) -> torch.Tensor:
     # reward for keeping pieces on the board
     piece_alive = torch.sum(state)*player_factor
 
-    return 1*piece_alive 
+    return 0.1*piece_alive 
 
     
 def rolling_win_rate(win_list, window_size=25):

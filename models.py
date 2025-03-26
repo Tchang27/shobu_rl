@@ -28,18 +28,31 @@ class ResidualBlock2D(nn.Module):
     
 
 class MLP_Head(nn.Module):
-    def __init__(self, in_channels, out_channels, hidden_channels=64, dropout_rate=0.3):
+    def __init__(self, in_channels, out_channels, hidden_channels=512, dropout_rate=0.3):
         super(MLP_Head, self).__init__()
         self.fc1 = nn.Linear(in_channels, hidden_channels)
         self.fc2 = nn.Linear(hidden_channels, out_channels)
-        self.dropout = nn.Dropout(p=dropout_rate)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
-        x = self.dropout(x)
         x = self.fc2(x)
         return x
 
+    
+class Critic(nn.Module):
+    def __init__(self, in_channels):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_channels, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1)
+        )
+    
+    def forward(self, x):
+        return self.net(x) 
+    
     
 class Shobu_PPO(nn.Module):
     def __init__(self, num_boards=1, board_size=8, dropout_rate=0.3):
@@ -48,22 +61,25 @@ class Shobu_PPO(nn.Module):
         # Input shape: (batch_size, num_boards, board_size, board_size)
         self.input_channels = num_boards
         
-        self.conv1 = nn.Conv2d(self.input_channels, 16, kernel_size=4, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm2d(16)
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=1)
-        
-        self.residual1 = ResidualBlock2D(16, 16)
-        
-        self.conv2 = nn.Conv2d(16, 64, kernel_size=4, stride=1, padding=1)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=1)
-        
-        self.residual2 = ResidualBlock2D(64, 64)
-        
-        self.conv3 = nn.Conv2d(64, 256, kernel_size=2, stride=1)
-        self.bn3 = nn.BatchNorm2d(256)
-        self.pool3 = nn.AdaptiveAvgPool2d(1)  # Global average pooling
-        
+        self.backbone = nn.Sequential(
+            # Block 1
+            nn.Conv2d(self.input_channels, 16, kernel_size=4, stride=1, padding=1),
+            nn.BatchNorm2d(16),
+            nn.MaxPool2d(kernel_size=2, stride=1),
+            #ResidualBlock2D(16, 16),
+
+            # Block 2
+            nn.Conv2d(16, 64, kernel_size=4, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.MaxPool2d(kernel_size=2, stride=1),
+            #ResidualBlock2D(64, 64),
+
+            # Block 3
+            nn.Conv2d(64, 256, kernel_size=2, stride=1),
+            nn.BatchNorm2d(256),
+            nn.AdaptiveAvgPool2d(1)  # Global average pooling
+        )
+
         self.fc_input_size = self._calculate_fc_input_size(num_boards, board_size)
         
         # passive head
@@ -74,30 +90,20 @@ class Shobu_PPO(nn.Module):
         self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64)
         
         # critic head
-        self.critic = MLP_Head(self.fc_input_size, 1) 
+        self.critic = Critic(self.fc_input_size) 
         
 
     def _calculate_fc_input_size(self, num_boards, board_size):
         x = torch.randn(1, num_boards, board_size, board_size)
-        x = self.pool1(F.relu(self.bn1(self.conv1(x))))
-        x = self.residual1(x)
-        x = self.pool2(F.relu(self.bn2(self.conv2(x))))
-        x = self.residual2(x)
-        x = self.pool3(F.relu(self.bn3(self.conv3(x))))
+        x = self.backbone(x)
         return x.view(1, -1).size(1)
     
     
     def get_features(self, x):
         # Input shape: (batch_size, num_boards, board_size, board_size)
-        x = self.pool1(F.relu(self.bn1(self.conv1(x))))
-        x = self.residual1(x)
-        x = self.pool2(F.relu(self.bn2(self.conv2(x))))
-        x = self.residual2(x)
-        x = self.pool3(F.relu(self.bn3(self.conv3(x))))
-        
-        x = x.view(x.size(0), -1)
-        
-        return x
+        x = self.backbone(x)      
+        return x.view(x.size(0), -1)
+    
     
     def get_policy(self, x):
         '''

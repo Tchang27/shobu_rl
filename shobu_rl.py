@@ -15,7 +15,7 @@ from itertools import combinations
 # training parameters
 MAX_TURNS = 100
 MAX_GAMES = 50000
-BATCH_SIZE = 256
+BATCH_SIZE = 64
 EPOCHS = 4
 ON_POLICY = 20
 
@@ -23,16 +23,16 @@ ON_POLICY = 20
 # Value function loss weight
 C1 = 0.5
 # Entropy loss weight
-C2 = 0.05
+C2 = 0.005
 # Clipped PPO parameter
-EPSILON = 0.2
+EPSILON = 0.1
 # Discount factor parameters
 GAMMA = 0.95
 LAMBDA = 0.9
 # size of replay buffer
 MEMORY_SIZE = 500000
 # win reward
-WIN_REWARD = 20
+WIN_REWARD = 10
 # add new opponent every UPDATE_OPPS epochs
 UPDATE_OPPS = 1000
 # max number of opponents to track at a given time
@@ -259,7 +259,7 @@ class Shobu_RL(Shobu):
         else:
             with torch.no_grad():
                 policy_output = self.ppo_model.get_policy(state)
-                ove, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.model_action(policy_output)
+                move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.model_action(policy_output)
             return move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask
 
     
@@ -344,9 +344,7 @@ class Shobu_RL(Shobu):
                 # win/loss reward
                 rewards[-1] += WIN_REWARD if (self.board.check_winner() and (self.cur_turn==self.model_player)) else -WIN_REWARD
                 # compute returns + advantages
-                returns, advantages = compute_returns(q_values, rewards)  
-                advantages = torch.cat(advantages)
-                returns = torch.stack(returns)
+                returns, advantages = compute_returns(q_values, rewards, device, GAMMA, LAMBDA)
             # add advantage and returns to queue of transitions
             transitions_with_advantage = []
             for i in range(len(episode_memory.memory)):
@@ -399,7 +397,7 @@ class Shobu_RL(Shobu):
                         policy_loss = -clip_loss.mean()
                         
                         # value function loss
-                        value_loss = F.mse_loss(self.ppo_model.value_function(state_batch), returns)
+                        value_loss = F.mse_loss(self.ppo_model.value_function(state_batch).squeeze(), returns)
 
                         # entropy loss
                         masked_passive_logits = passive_logits + torch.log(passive_masks.float() + 1e-10)
@@ -410,11 +408,12 @@ class Shobu_RL(Shobu):
 
                         # Final PPO loss
                         total_loss = policy_loss + (C1*value_loss) + (C2*entropy_loss)
+                        #print(policy_loss, value_loss, entropy_loss)
 
                         # backprop and optimize
                         opt.zero_grad()
                         total_loss.backward()
-                        torch.nn.utils.clip_grad_norm_(self.ppo_model.parameters(), max_norm=1.0)
+                        torch.nn.utils.clip_grad_norm_(self.ppo_model.parameters(), max_norm=0.5)
                         opt.step()
 
                         # metrics
