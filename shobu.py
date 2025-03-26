@@ -2,6 +2,7 @@ import itertools
 from enum import Enum
 from typing import Union
 from bitboard_utils import *
+import sys
 
 """
 Implements the Shobu game. See `main.py` for an example of how to use this
@@ -471,7 +472,19 @@ class Shobu:
 		return None
 
 	def as_matrix(self) -> np.ndarray:
-		...
+		"""
+		Converts this Shobu instance into a matrix. -1 represents white pieces,
+		1 represents black pieces, and 0 represents empty squares.
+		"""
+		def process_bitboard(board: np.uint64):
+			as_bytes = np.array([board]).view(np.uint8)
+			if not (as_bytes.dtype.byteorder == '>' or (as_bytes.dtype.byteorder == '=' and sys.byteorder == 'big')):
+				as_bytes = as_bytes[::-1]  # try to get endianness right in case this is a problem
+			bits = np.float32(np.unpackbits(np.expand_dims(as_bytes, axis=1), axis=1))
+			bits = np.flip(bits, axis=1)
+			return bits
+		board = process_bitboard(self.black) - process_bitboard(self.white)
+		return np.expand_dims(board, axis=0)
 
 	def flip(self):
 		"""
