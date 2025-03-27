@@ -13,22 +13,22 @@ from itertools import combinations
 
 # hyperparameters
 # training parameters
-MAX_TURNS = 100
+MAX_TURNS = 80
 MAX_GAMES = 100000
-BATCH_SIZE = 256
+BATCH_SIZE = 512
 EPOCHS = 3
-ON_POLICY = 20
+ON_POLICY = 50
 
 
 # Value function loss weight
 C1 = 0.5
 # Entropy loss weight
-C2 = 0.01
+C2 = 0.05
 # Clipped PPO parameter
 EPSILON = 0.2
 # Discount factor parameters
-GAMMA = 0.99
-LAMBDA = 0.9
+GAMMA = 0.995
+LAMBDA = 0.95
 # size of replay buffer
 MEMORY_SIZE = 500000
 # win reward
@@ -110,15 +110,10 @@ class Shobu_RL(Shobu):
         '''
         From the policy model, extract passive move logits
         '''
-        # Combine passive probabilities into joint distribution
+        # Extract passive probabilities
         p_pos = policy_output["passive"]["position"]
-        p_dir = policy_output["passive"]["direction"]
-        p_dist = policy_output["passive"]["distance"]
 
-        # Create passive joint distribution tensor
-        passive_logits = p_pos.unsqueeze(-1).unsqueeze(-1) * p_dir.unsqueeze(1).unsqueeze(-1) * p_dist.unsqueeze(1).unsqueeze(1)
-        # Flatten the passive move probabilities
-        passive_logits = passive_logits.flatten(start_dim=1)
+        passive_logits = p_pos
         return passive_logits
               
         
@@ -141,7 +136,7 @@ class Shobu_RL(Shobu):
             pfrom = (px*8) + py 
             pidx = (pfrom * (8 * 2)) + (pd * 2) + (ps-1)
             mask[pidx] = 1
-        logits[mask == 0] = float('-inf')
+        logits[mask == 0] = -1e10
         return logits, mask
     
     
@@ -153,7 +148,7 @@ class Shobu_RL(Shobu):
                 (ax, ay)= move[1]
                 adix = (ax*8) + ay 
                 mask[adix] = 1
-        logits[mask == 0] = float('-inf')
+        logits[mask == 0] = -1e10
         return logits, mask
     
         
@@ -331,6 +326,7 @@ class Shobu_RL(Shobu):
         opp_win_list = []
         # memory for caching states, action, next state, and reward
         train_memory = ReplayMemory(capacity=MEMORY_SIZE)
+        self.ppo_model.train()
         
         for episode in range(MAX_GAMES):
             # init a new game
@@ -339,10 +335,8 @@ class Shobu_RL(Shobu):
             
             # play game
             t0 = time.time()
-            self.ppo_model.eval() # to make dropout and batchnorm behave correctly
             episode_memory = ReplayMemory(capacity=MEMORY_SIZE)
             episode_memory = self.model_play_game(episode_memory)
-            self.ppo_model.train()
             t1 = time.time()
             print(f"\n Game simulated in: {t1-t0}")
             
@@ -366,7 +360,7 @@ class Shobu_RL(Shobu):
                 if self.board.check_winner():
                     rewards[-1] += WIN_REWARD if (self.board.check_winner() and (self.cur_turn==self.model_player)) else -WIN_REWARD
                 else:
-                    rewards[-1] += -WIN_REWARD*2
+                    rewards[-1] += -WIN_REWARD*1.5
                 # compute returns + advantages
                 returns, advantages = compute_returns(q_values, rewards, device, GAMMA, LAMBDA)
             # add advantage and returns to queue of transitions
@@ -420,7 +414,6 @@ class Shobu_RL(Shobu):
                         # advantages and returns
                         advantages = torch.stack(batch.advantages)
                         returns = torch.stack(batch.returns)
-                        
 
                         # ratio loss on passive and aggressive move probs
                         policy_outputs = self.ppo_model.get_policy(state_batch)
@@ -432,15 +425,15 @@ class Shobu_RL(Shobu):
                         ratio = torch.exp(new_logprobs_joint-old_logprobs_joint)
 
                         # Clipped PPO loss
-                        clip_loss = torch.min(ratio * advantages, torch.clamp(ratio, 1 - EPSILON, 1 + EPSILON) * advantages)
-                        policy_loss = -clip_loss.mean()
-                        
+                        clipped_ratio = torch.clamp(ratio, 1 - EPSILON, 1 + EPSILON)
+                        policy_loss = -torch.min(ratio * advantages, clipped_ratio * advantages).mean()
+
                         # value function loss
-                        value_loss = F.mse_loss(self.ppo_model.value_function(state_batch).squeeze(), returns)
+                        value_loss = F.huber_loss(self.ppo_model.value_function(state_batch).squeeze(), returns)
 
                         # entropy loss
-                        passive_logits[passive_masks == 0] = float('-inf')
-                        aggressive_logits[aggressive_masks == 0] = float('-inf')
+                        passive_logits[passive_masks == 0] = -1e10
+                        aggressive_logits[aggressive_masks == 0] = -1e10
                         entropy_passive = torch.distributions.Categorical(logits=passive_logits).entropy()
                         entropy_aggressive = torch.distributions.Categorical(logits=aggressive_logits).entropy()
                         entropy_loss = -torch.mean(entropy_passive + entropy_aggressive) 
@@ -461,6 +454,7 @@ class Shobu_RL(Shobu):
                         batch_entropy_loss_list.append(entropy_loss.item())
                         batch_loss.append(total_loss.item())
                         batch_reward.append(np.mean(returns.clone().cpu().numpy()))
+                        
                     
                     # update metrics
                     avg_epoch_ppo_loss = np.mean(batch_ppo_loss_list)

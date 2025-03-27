@@ -135,7 +135,7 @@ def intermediate_reward(state, step, max_step) -> torch.Tensor:
     # reward for piece discrepancy
     piece_discrep = torch.sum(state)
 
-    return (piece_discrep/16) + (-0.01)*(step/max_step)
+    return (piece_discrep/16) #+ (-0.01)*(step/max_step)
 
     
 def rolling_win_rate(win_list, window_size=25):
@@ -227,11 +227,11 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, entrop
     fig2, ax3 = plt.subplots(figsize=(12, 8))
     ax3.set_xlabel("Episode")
     ax3.spines["right"].set_position(("outward", 60))  # Move win rate axis outward
-    ax3.set_ylabel(f"Rolling Win Rate (Last {plot_every*5})", color="tab:green")
+    ax3.set_ylabel(f"Rolling Win Rate (Last {plot_every})", color="tab:green")
 
     # Calculate and plot rolling win rate
-    if len(win_list) > plot_every*5:
-        rolling_rate = rolling_win_rate(win_list, window_size=(plot_every*5))
+    if len(win_list) > plot_every:
+        rolling_rate = rolling_win_rate(win_list, window_size=(plot_every))
         ax3.plot(range(len(rolling_rate)), rolling_rate, alpha=0.2,label="Rolling Win Rate", color="green", linewidth=3)
 
     ax3.tick_params(axis="y", labelcolor="tab:green")
@@ -240,11 +240,11 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, entrop
     # Plot draw rate
     ax4 = ax3.twinx()
     ax4.spines["right"]  # Move win rate axis outward
-    ax4.set_ylabel(f"Rolling Draw Rate (Last {plot_every*5})", color="tab:purple")
+    ax4.set_ylabel(f"Rolling Draw Rate (Last {plot_every})", color="tab:purple")
 
     # Calculate and plot rolling draw rate
-    if len(draw_list) > plot_every*5:
-        rolling_drawrate = rolling_win_rate(draw_list, window_size=(plot_every*5))
+    if len(draw_list) > plot_every:
+        rolling_drawrate = rolling_win_rate(draw_list, window_size=(plot_every))
         ax4.plot(range(len(rolling_drawrate)), rolling_drawrate, alpha=0.2,label="Rolling Draw Rate", color="purple", linewidth=3)
 
     ax4.tick_params(axis="y", labelcolor="tab:purple")
@@ -252,11 +252,11 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, entrop
     # Plot win rate for opp
     ax5 = ax3.twinx()
     ax5.spines["right"].set_position(("outward", 60))  # Move win rate axis outward
-    ax5.set_ylabel(f"Rolling Opponent Win Rate (Last {plot_every*5})", color="tab:cyan")
+    ax5.set_ylabel(f"Rolling Opponent Win Rate (Last {plot_every})", color="tab:cyan")
 
     # Calculate and plot rolling draw rate
-    if len(draw_list) > plot_every*5:
-        rolling_opprate = rolling_win_rate(opp_win_list, window_size=(plot_every*5))
+    if len(draw_list) > plot_every:
+        rolling_opprate = rolling_win_rate(opp_win_list, window_size=(plot_every))
         ax5.plot(range(len(rolling_opprate)), rolling_opprate, alpha=0.2,label="Rolling Opponent Win Rate", color="cyan", linewidth=3)
 
     ax5.tick_params(axis="y", labelcolor="tab:cyan")

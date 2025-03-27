@@ -30,13 +30,16 @@ class ResidualBlock2D(nn.Module):
 class MLP_Head(nn.Module):
     def __init__(self, in_channels, out_channels, hidden_channels=256, dropout_rate=0.3):
         super(MLP_Head, self).__init__()
-        self.fc1 = nn.Linear(in_channels, hidden_channels)
-        self.fc2 = nn.Linear(hidden_channels, out_channels)
+        self.net = nn.Sequential(
+            nn.Linear(in_channels, hidden_channels),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, out_channels),
+        )
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+        return self.net(x)
 
     
 class Critic(nn.Module):
@@ -85,11 +88,9 @@ class Shobu_PPO(nn.Module):
         self.fc_input_size = self._calculate_fc_input_size(num_boards, board_size)
         
         # passive head
-        self.passive_pos_head = MLP_Head(self.fc_input_size, 64)
-        self.passive_dir_head = MLP_Head(self.fc_input_size, 8)
-        self.passive_dist_head = MLP_Head(self.fc_input_size, 2)
+        self.passive_head = MLP_Head(self.fc_input_size, 1024, hidden_channels=1024)
         # aggressive head (conditioned on first move)
-        self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64)
+        self.aggressive_pos_head = MLP_Head(self.fc_input_size+1024, 64, hidden_channels=1024)
         
         # critic head
         self.critic = Critic(self.fc_input_size) 
@@ -112,20 +113,17 @@ class Shobu_PPO(nn.Module):
         Get policy
         '''
         x = self.get_features(x)
+        
         # passive moves
-        passive_position_probs = self.passive_pos_head(x)
-        passive_dir_probs = self.passive_dir_head(x)
-        passive_dist_probs = self.passive_dist_head(x)
+        passive_probs = self.passive_head(x)
         
         # aggressive moves, condition on first move
-        x = torch.concat((x,passive_position_probs,passive_dir_probs,passive_dist_probs), dim=1)
+        x = torch.concat((x,passive_probs), dim=1)
         aggressive_position_probs = self.aggressive_pos_head(x)
         
         return {
             "passive": {
-                "position": passive_position_probs,
-                "direction": passive_dir_probs,
-                "distance": passive_dist_probs
+                "position": passive_probs,
             },
             "aggressive": {
                 "position": aggressive_position_probs
@@ -150,12 +148,10 @@ class Shobu_PPO(nn.Module):
         x = self.get_features(x)
         
         # passive moves
-        passive_position_probs = self.passive_pos_head(x)
-        passive_dir_probs = self.passive_dir_head(x)
-        passive_dist_probs = self.passive_dist_head(x)
+        passive_probs = self.passive_head(x)
         
-        # aggressive moves, condition of passive moves
-        x = torch.concat((x,passive_position_probs,passive_dir_probs,passive_dist_probs), dim=1)
+        # aggressive moves, condition on first move
+        x = torch.concat((x,passive_probs), dim=1)
         aggressive_position_probs = self.aggressive_pos_head(x)
         
         # critic
@@ -163,9 +159,8 @@ class Shobu_PPO(nn.Module):
         
         return {
             "passive": {
-                "position": passive_position_probs,
-                "direction": passive_dir_probs,
-                "distance": passive_dist_probs
+                "position": passive_probs,
+
             },
             "aggressive": {
                 "position": aggressive_position_probs
