@@ -127,22 +127,15 @@ def compute_returns(rewards, values, device, gamma=0.99, lam=0.95) -> list[list,
     return returns, advantages
       
         
-def intermediate_reward(state, player) -> torch.Tensor:
+def intermediate_reward(state, step, max_step) -> torch.Tensor:
     '''
     Intermediate reward function - we can shape this later
     
-    '''
-    player_factor = 1
-    if player == Player.WHITE:
-        player_factor *= -1
-        
-    # reward for keeping pieces on the board
-    piece_alive = torch.sum(state == player_factor)
-    
-    # reward for knocking pieces off
-    pieces_killed = 16-torch.sum(state == (player_factor*-1))
+    '''   
+    # reward for piece discrepancy
+    piece_discrep = torch.sum(state)
 
-    return 0.1*piece_alive + 0.2*pieces_killed
+    return (piece_discrep/16) + (-0.01)*(step/max_step)
 
     
 def rolling_win_rate(win_list, window_size=25):

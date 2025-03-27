@@ -14,8 +14,8 @@ from itertools import combinations
 # hyperparameters
 # training parameters
 MAX_TURNS = 100
-MAX_GAMES = 50000
-BATCH_SIZE = 256
+MAX_GAMES = 100000
+BATCH_SIZE = 128
 EPOCHS = 4
 ON_POLICY = 20
 
@@ -23,7 +23,7 @@ ON_POLICY = 20
 # Value function loss weight
 C1 = 0.5
 # Entropy loss weight
-C2 = 0.005
+C2 = 0.01
 # Clipped PPO parameter
 EPSILON = 0.2
 # Discount factor parameters
@@ -33,7 +33,7 @@ LAMBDA = 0.9
 MEMORY_SIZE = 500000
 # win reward
 WIN_REWARD = 10
-# add new opponent every UPDATE_OPPS epochs
+# add new opponent every UPDATE_OPPS episodes
 UPDATE_OPPS = 1000
 # max number of opponents to track at a given time
 OPP_QUEUE_LENGTH = 6
@@ -62,7 +62,6 @@ class Shobu_RL(Shobu):
         self.board = Shobu.starting_position()
         # current player
         self.model_player = random.choice([-1, 1])
-        self.player_color = Player.BLACK if self.model_player==-1 else Player.WHITE
         # always start with black
         self.cur_turn = -1
 
@@ -279,7 +278,6 @@ class Shobu_RL(Shobu):
         if train:
             self.opp = random.choice(self.opponent_pool)
           
-        print(f"The model is: {self.player_color}")
         while (self.steps_done < MAX_TURNS):  
             if not train:
                 print("Current board")
@@ -300,10 +298,10 @@ class Shobu_RL(Shobu):
             
             # check for wincon
             if (winner := self.board.check_winner()) is not None:
-                if self.cur_turn == -1:
-                    print(f"The winner is black.")
+                if self.cur_turn == self.model_player:
+                    print(f"The winner is the model.")
                 else:
-                    print(f"The winner is white.")
+                    print(f"The winner is the opponent.")
                 return memory
             
             if not train:
@@ -363,12 +361,12 @@ class Shobu_RL(Shobu):
                 if sparse:
                     rewards = [0 for s in state_batch]
                 else:
-                    rewards = [intermediate_reward(s, self.player_color) for s in state_batch]
+                    rewards = [intermediate_reward(s, i, MAX_TURNS) for i,s in enumerate(state_batch)]
                 # win/loss reward - discourage stalling
                 if self.board.check_winner():
                     rewards[-1] += WIN_REWARD if (self.board.check_winner() and (self.cur_turn==self.model_player)) else -WIN_REWARD
                 else:
-                    rewards[-1] += -WIN_REWARD*2
+                    rewards[-1] += -WIN_REWARD
                 # compute returns + advantages
                 returns, advantages = compute_returns(q_values, rewards, device, GAMMA, LAMBDA)
             # add advantage and returns to queue of transitions

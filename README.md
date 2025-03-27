@@ -4,4 +4,31 @@
     - Intermediate reward is sum of model pieces - sum of opponent pieces, multiplied by 0.1
     - Win reward is 10
     - Draw penalty set to half of loss penalty, which is -win reward
+    - Hyperparameters:
+        - Batch size: 256
+        - epochs: 4
+        - training update: every 20 episodes
+        - max turns: 100
+        - C1 = 0.5
+        - C2 = 0.005
+        - EPSILON = 0.2
+        - GAMMA = 0.99
+        - LAMBDA = 0.9
+        - Learning rates: 3e-4,3e-4,1e-4
     - Result: model got good at stalling
+- Run 2:
+    - Intermediate reward is piece discrepancy multiplied by 0.2 + -0.01 for each step taken
+    - Win reward is 10
+    - Draw penalty set equal to loss penalty, which is -win reward
+    - Hyperparameters:
+        - Batch size: 128
+        - epochs: 4
+        - training update: every 20 episodes
+        - max turns: 100
+        - C1 = 0.5
+        - C2 = 0.01
+        - EPSILON = 0.2
+        - GAMMA = 0.99
+        - LAMBDA = 0.9
+        - Learning rates: 3e-4,3e-4,1e-4
+    - Result: 
