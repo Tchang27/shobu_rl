@@ -15,8 +15,8 @@ from itertools import combinations
 # training parameters
 MAX_TURNS = 100
 MAX_GAMES = 100000
-BATCH_SIZE = 128
-EPOCHS = 4
+BATCH_SIZE = 256
+EPOCHS = 3
 ON_POLICY = 20
 
 
@@ -366,7 +366,7 @@ class Shobu_RL(Shobu):
                 if self.board.check_winner():
                     rewards[-1] += WIN_REWARD if (self.board.check_winner() and (self.cur_turn==self.model_player)) else -WIN_REWARD
                 else:
-                    rewards[-1] += -WIN_REWARD
+                    rewards[-1] += -WIN_REWARD*2
                 # compute returns + advantages
                 returns, advantages = compute_returns(q_values, rewards, device, GAMMA, LAMBDA)
             # add advantage and returns to queue of transitions
