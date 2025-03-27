@@ -28,7 +28,7 @@ class ResidualBlock2D(nn.Module):
     
 
 class MLP_Head(nn.Module):
-    def __init__(self, in_channels, out_channels, hidden_channels=512, dropout_rate=0.3):
+    def __init__(self, in_channels, out_channels, hidden_channels=256, dropout_rate=0.3):
         super(MLP_Head, self).__init__()
         self.fc1 = nn.Linear(in_channels, hidden_channels)
         self.fc2 = nn.Linear(hidden_channels, out_channels)
@@ -40,14 +40,15 @@ class MLP_Head(nn.Module):
 
     
 class Critic(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, hidden_channels=256):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(in_channels, 64),
+            nn.Linear(in_channels, hidden_channels),
             nn.ReLU(),
-            nn.Linear(64, 64),
+            nn.Linear(hidden_channels, hidden_channels//4),
             nn.ReLU(),
-            nn.Linear(64, 1)
+            nn.Linear(hidden_channels//4, 1),
+            nn.Tanh()
         )
     
     def forward(self, x):
@@ -63,21 +64,22 @@ class Shobu_PPO(nn.Module):
         
         self.backbone = nn.Sequential(
             # Block 1
-            nn.Conv2d(self.input_channels, 16, kernel_size=4, stride=1, padding=1),
+            nn.Conv2d(self.input_channels, 16, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(16),
-            nn.MaxPool2d(kernel_size=2, stride=1),
+            nn.ReLU(),
             #ResidualBlock2D(16, 16),
 
             # Block 2
-            nn.Conv2d(16, 64, kernel_size=4, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.MaxPool2d(kernel_size=2, stride=1),
-            #ResidualBlock2D(64, 64),
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            #ResidualBlock2D(32, 32),
 
             # Block 3
-            nn.Conv2d(64, 256, kernel_size=2, stride=1),
-            nn.BatchNorm2d(256),
-            nn.AdaptiveAvgPool2d(1)  # Global average pooling
+            nn.Conv2d(32, 64, kernel_size=3, stride=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Flatten()
         )
 
         self.fc_input_size = self._calculate_fc_input_size(num_boards, board_size)

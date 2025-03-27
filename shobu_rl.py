@@ -15,7 +15,7 @@ from itertools import combinations
 # training parameters
 MAX_TURNS = 100
 MAX_GAMES = 50000
-BATCH_SIZE = 64
+BATCH_SIZE = 256
 EPOCHS = 4
 ON_POLICY = 20
 
@@ -25,9 +25,9 @@ C1 = 0.5
 # Entropy loss weight
 C2 = 0.005
 # Clipped PPO parameter
-EPSILON = 0.1
+EPSILON = 0.2
 # Discount factor parameters
-GAMMA = 0.95
+GAMMA = 0.99
 LAMBDA = 0.9
 # size of replay buffer
 MEMORY_SIZE = 500000
@@ -171,9 +171,11 @@ class Shobu_RL(Shobu):
             
         # create mask
         masked_logits, mask = self.mask_passive_logits(passive_logits, valid_moves)
-            
+       
+        # get masked probs
         masked_probs = torch.softmax(masked_logits, dim=-1)
         masked_log_probs = torch.log_softmax(masked_logits, dim=-1)
+        
         # Sample passive move
         passive_index = torch.multinomial(masked_probs, 1).item()
 
@@ -189,6 +191,9 @@ class Shobu_RL(Shobu):
         dist = s+1
 
         # check if valid:
+        if (passive_start_x, passive_start_y, direction, dist) not in valid_passive_moves:
+            print(valid_passive_moves)
+            print(masked_logits[passive_index])
         assert (passive_start_x, passive_start_y, direction, dist) in valid_passive_moves
         return (passive_start_x, passive_start_y, direction, dist), passive_index, masked_log_probs, mask
 
@@ -200,7 +205,7 @@ class Shobu_RL(Shobu):
         aggressive_logits = self.aggressive_logits(policy_output).squeeze()
         masked_logits, mask = self.mask_aggressive_logits(aggressive_logits, passive_move, valid_moves)
 
-        # probabilities
+        # get masked probs
         masked_probs = torch.softmax(masked_logits, dim=-1)
         masked_log_probs = torch.log_softmax(masked_logits, dim=-1)
         
@@ -259,6 +264,7 @@ class Shobu_RL(Shobu):
         
         # inference
         else:
+            self.steps_done += 0.5
             with torch.no_grad():
                 policy_output = self.ppo_model.get_policy(state)
                 move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.model_action(policy_output)
@@ -274,12 +280,16 @@ class Shobu_RL(Shobu):
             self.opp = random.choice(self.opponent_pool)
           
         print(f"The model is: {self.player_color}")
-        while (self.steps_done < MAX_TURNS):    
+        while (self.steps_done < MAX_TURNS):  
+            if not train:
+                print("Current board")
+                print(self.board)
+                
             board_state = self.board.as_matrix()
             
             # get input move by sampling from policy model
             start_state = torch.tensor(board_state.copy(), device=device, dtype=torch.float32).unsqueeze(0)
-            move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.select_action(start_state)
+            move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.select_action(start_state, train)
             
             # push to memory if player is the trainable model
             if self.cur_turn == self.model_player:
@@ -296,20 +306,31 @@ class Shobu_RL(Shobu):
                     print(f"The winner is white.")
                 return memory
             
+            if not train:
+                print("After move")
+                print(self.board)
+            
             # flip board
             self.board.flip()
             # next turn
             self.cur_turn *= -1
+        
+        # return memory of transitions
         return memory   
 
+    
     def train(self, opt, scheduler, sparse=True):
         '''
         Train a PPO model for Shobu
         '''
         loss_list = []
+        ppo_loss_list = []
+        value_loss_list = []
+        entropy_loss_list = []
         reward_list = []
         win_list = []
-        intermediate_list = []
+        draw_list = []
+        opp_win_list = []
         # memory for caching states, action, next state, and reward
         train_memory = ReplayMemory(capacity=MEMORY_SIZE)
         
@@ -343,8 +364,11 @@ class Shobu_RL(Shobu):
                     rewards = [0 for s in state_batch]
                 else:
                     rewards = [intermediate_reward(s, self.player_color) for s in state_batch]
-                # win/loss reward
-                rewards[-1] += WIN_REWARD if (self.board.check_winner() and (self.cur_turn==self.model_player)) else -WIN_REWARD
+                # win/loss reward - discourage stalling
+                if self.board.check_winner():
+                    rewards[-1] += WIN_REWARD if (self.board.check_winner() and (self.cur_turn==self.model_player)) else -WIN_REWARD
+                else:
+                    rewards[-1] += -WIN_REWARD*2
                 # compute returns + advantages
                 returns, advantages = compute_returns(q_values, rewards, device, GAMMA, LAMBDA)
             # add advantage and returns to queue of transitions
@@ -357,13 +381,27 @@ class Shobu_RL(Shobu):
          
             # record winner every episode
             win_list.append(1 if (self.board.check_winner() and (self.cur_turn==self.model_player)) else 0)
+            draw_list.append(1 if (not self.board.check_winner()) else 0)
+            opp_win_list.append(1 if (self.board.check_winner() and (self.cur_turn!=self.model_player)) else 0)
             
             # training step every ON_POLICY episodes
             if ((episode+1) % ON_POLICY) == 0:
+                # normalize returns and advantages
+                returns = torch.stack([t.returns for t in train_memory.memory])
+                advantages = torch.stack([t.advantages for t in train_memory.memory])
+                advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+                returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+                for i, t in enumerate(train_memory.memory):
+                    train_memory.memory[i] = Transition(t.state, t.passive, t.aggressive, t.passive_probs, t.aggressive_probs, t.passive_mask, t.aggressive_mask, advantages[i], returns[i])
+                    
+                # train for EPOCHS epochs
                 for e in range(EPOCHS):
                     # minibatch
                     train_memory_copy = copy.deepcopy(train_memory)
                     train_memory_copy.shuffle()
+                    batch_ppo_loss_list = []
+                    batch_value_loss_list = []
+                    batch_entropy_loss_list = []
                     batch_loss = []
                     batch_reward = []
                     while len(train_memory_copy) > 0:
@@ -384,6 +422,7 @@ class Shobu_RL(Shobu):
                         # advantages and returns
                         advantages = torch.stack(batch.advantages)
                         returns = torch.stack(batch.returns)
+                        
 
                         # ratio loss on passive and aggressive move probs
                         policy_outputs = self.ppo_model.get_policy(state_batch)
@@ -402,10 +441,10 @@ class Shobu_RL(Shobu):
                         value_loss = F.mse_loss(self.ppo_model.value_function(state_batch).squeeze(), returns)
 
                         # entropy loss
-                        masked_passive_logits = passive_logits + torch.log(passive_masks.float() + 1e-10)
-                        masked_aggressive_logits = aggressive_logits + torch.log(aggressive_masks.float() + 1e-10)
-                        entropy_passive = torch.distributions.Categorical(logits=masked_passive_logits).entropy()
-                        entropy_aggressive = torch.distributions.Categorical(logits=masked_aggressive_logits).entropy()
+                        passive_logits[passive_masks == 0] = float('-inf')
+                        aggressive_logits[aggressive_masks == 0] = float('-inf')
+                        entropy_passive = torch.distributions.Categorical(logits=passive_logits).entropy()
+                        entropy_aggressive = torch.distributions.Categorical(logits=aggressive_logits).entropy()
                         entropy_loss = -torch.mean(entropy_passive + entropy_aggressive) 
 
                         # Final PPO loss
@@ -419,17 +458,26 @@ class Shobu_RL(Shobu):
                         opt.step()
 
                         # metrics
+                        batch_ppo_loss_list.append(policy_loss.item())
+                        batch_value_loss_list.append(value_loss.item())
+                        batch_entropy_loss_list.append(entropy_loss.item())
                         batch_loss.append(total_loss.item())
                         batch_reward.append(np.mean(returns.clone().cpu().numpy()))
                     
                     # update metrics
+                    avg_epoch_ppo_loss = np.mean(batch_ppo_loss_list)
+                    avg_epoch_value_loss = np.mean(batch_value_loss_list)
+                    avg_epoch_entropy_loss = np.mean(batch_entropy_loss_list)
                     avg_epoch_loss = np.mean(batch_loss)
                     avg_epoch_reward = np.mean(batch_reward)
+                    ppo_loss_list.append(avg_epoch_ppo_loss)
+                    value_loss_list.append(avg_epoch_value_loss)
+                    entropy_loss_list.append(avg_epoch_entropy_loss)
                     loss_list.append(avg_epoch_loss)
                     reward_list.append(avg_epoch_reward)
 
                 # lr scheduler if needed
-                scheduler.step()
+                #scheduler.step()
                 
                 # new memory queue - PPO requires fresh data
                 train_memory = ReplayMemory(capacity=MEMORY_SIZE)
@@ -446,7 +494,7 @@ class Shobu_RL(Shobu):
             plot_every = ON_POLICY
             if ((episode+1) % plot_every) == 0:
                 # plot progress
-                plot_progress(reward_list, loss_list, win_list, plot_every, episode)
+                plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, entropy_loss_list, win_list, opp_win_list, draw_list, plot_every, episode)
 
             # save checkpoints
             if ((episode+1)%1000) == 0:
