@@ -1,7 +1,7 @@
 import abc
 import random
 
-from shobu import Shobu, ShobuMove
+from shobu import Shobu, ShobuMove, Player
 from models import Shobu_PPO
 from rl_utils import model_action
 import torch
@@ -60,20 +60,23 @@ class RLAgent(Agent):
 	to select moves.
 	"""
 	def __init__(self, checkpoint_path: str):
-		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")   
+		self.device = torch.device("cpu")   
 		self.model = Shobu_PPO()
 		self.model.to(self.device)
-		self.model.load_state_dict(torch.load(checkpoint_path))
+		self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
 		self.model.eval()
 
 	def move(self, board: Shobu):
 		with torch.no_grad():
+			# check if we need to flip board
+			if board.next_mover == Player.WHITE:
+				board.flip()
 			state = board.as_matrix()
-			policy_output = self.model.get_policy(state)
+			start_state = torch.tensor(state.copy(), device=self.device, dtype=torch.float32).unsqueeze(0)
+			policy_output = self.model.get_policy(start_state)
 			move, _, _, _, _, _, _ = model_action(policy_output, board, self.device)
+			# check if we need to flip board and move
+			if board.next_mover == Player.WHITE:
+				board.flip()
+				move.flip()
 		return move
-    
-    
-    
-    
-    
