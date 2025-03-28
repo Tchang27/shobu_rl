@@ -67,16 +67,16 @@ class RLAgent(Agent):
 		self.model.eval()
 
 	def move(self, board: Shobu):
+		# check if we need to flip board
+		if board.next_mover == Player.WHITE:
+			board.flip()
 		with torch.no_grad():
-			# check if we need to flip board
-			if board.next_mover == Player.WHITE:
-				board.flip()
 			state = board.as_matrix()
 			start_state = torch.tensor(state.copy(), device=self.device, dtype=torch.float32).unsqueeze(0)
 			policy_output = self.model.get_policy(start_state)
 			move, _, _, _, _, _, _ = model_action(policy_output, board, self.device)
-			# check if we need to flip board and move
-			if board.next_mover == Player.WHITE:
-				board.flip()
-				move.flip()
+		# check if we need to flip board and move
+		if board.next_mover == Player.WHITE:
+			board.flip()
+			move.flip()
 		return move

@@ -77,7 +77,7 @@ def _run_game_and_update(args):
 
 def round_robin(
 		agents: list[Agent],
-		max_moves_per_game: int = 80,
+		max_moves_per_game: int = 100,
 		num_rounds: int = 10,
 		k: int = 24
 ) -> tuple[np.ndarray, np.array]:
