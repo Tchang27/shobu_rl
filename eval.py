@@ -29,7 +29,7 @@ def play_game(
 		if print_info: print(board)
 		if (winner := board.check_winner()) is not None:
 			if print_info: print(f"The winner is {winner}.")
-			return
+			return winner
 		if board.next_mover == Player.BLACK:
 			move = black_player.move(board)
 		else:
@@ -39,6 +39,7 @@ def play_game(
 
 		if print_info: print(f"Next move is {move}")
 		if print_info: print("\n---------------------------------")
+	return None
 
 
 class RatedAgent:
@@ -63,7 +64,7 @@ class RatedAgent:
 			s = 0.5
 		else:
 			s = 0
-		self.rating += k * (s - e)
+		self.rating = round(self.rating + k * (s - e))
 		return old_rating
 
 
@@ -116,6 +117,7 @@ def round_robin(
 	with Pool(16) as p:
 		for round in tqdm(rounds):
 			random.shuffle(round)  # this may be good or bad idea
+			num_decisive = 0
 			for (black_id, white_id, result) in p.map(_run_game_and_update, round):
 				black = rated_agents[black_id]
 				white = rated_agents[white_id]
@@ -123,6 +125,8 @@ def round_robin(
 				old_black_rating = black.update(Player.BLACK, result, white.rating, k)
 				white.update(Player.WHITE, result, old_black_rating, k)
 				win_matrix[black_id][white_id] += 1
+				if result is not None: num_decisive +=1
+			print(f"{num_decisive} decisive games")
 
 	elos = list(map(lambda ra: ra.rating, rated_agents))
 	return win_matrix, elos
