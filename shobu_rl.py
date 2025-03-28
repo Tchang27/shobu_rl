@@ -14,7 +14,7 @@ from itertools import combinations
 # hyperparameters
 # training parameters
 MAX_TURNS = 80
-MAX_GAMES = 100000
+MAX_GAMES = 500000
 BATCH_SIZE = 512
 EPOCHS = 3
 ON_POLICY = 50
@@ -43,7 +43,7 @@ device = torch.device(
 )
 
 
-class Shobu_RL(Shobu):
+class Shobu_RL():
     def __init__(self, ppo_model: nn.Module):
         super().__init__()
         # init models
@@ -104,138 +104,9 @@ class Shobu_RL(Shobu):
             mid_index = random.randint(2, min(len(self.opponent_pool) - 1, 5))
             removed = self.opponent_pool[mid_index]
             del self.opponent_pool[mid_index]
-    
-    
-    def passive_logits(self, policy_output):
-        '''
-        From the policy model, extract passive move logits
-        '''
-        # Extract passive probabilities
-        p_pos = policy_output["passive"]["position"]
-
-        passive_logits = p_pos
-        return passive_logits
-              
-        
-    def aggressive_logits(self, policy_output):
-        '''
-        From the policy model, extract aggressive move logits
-        '''
-        # Extract aggressive probabilities
-        a_pos = policy_output["aggressive"]["position"]
-        
-        aggressive_logits = a_pos
-        return aggressive_logits
-    
-    
-    def mask_passive_logits(self, logits, valid_moves):
-        # create mask
-        mask = torch.zeros(logits.shape, device=device, dtype=torch.float32)
-        for move in valid_moves:
-            px, py, pd, ps = move[0]
-            pfrom = (px*8) + py 
-            pidx = (pfrom * (8 * 2)) + (pd * 2) + (ps-1)
-            mask[pidx] = 1
-        logits[mask == 0] = -1e10
-        return logits, mask
-    
-    
-    def mask_aggressive_logits(self, logits, passive_move, valid_moves):
-        # create mask
-        mask = torch.zeros(logits.shape, device=device, dtype=torch.float32)
-        for move in valid_moves:
-            if move[0] == passive_move:
-                (ax, ay)= move[1]
-                adix = (ax*8) + ay 
-                mask[adix] = 1
-        logits[mask == 0] = -1e10
-        return logits, mask
-    
-        
-    def sample_passive(self, policy_output, valid_moves):
-        '''
-        From the policy model, sample passive action
-        '''
-        # Flatten the passive move probabilities
-        passive_logits = self.passive_logits(policy_output).squeeze()
-        
-        valid_passive_moves = set()
-        for m in valid_moves:
-            valid_passive_moves.add(m[0])
-            
-        # create mask
-        masked_logits, mask = self.mask_passive_logits(passive_logits, valid_moves)
-       
-        # get masked probs
-        masked_probs = torch.softmax(masked_logits, dim=-1)
-        masked_log_probs = torch.log_softmax(masked_logits, dim=-1)
-        
-        # Sample passive move
-        passive_index = torch.multinomial(masked_probs, 1).item()
-
-        # Decode the sampled passive move
-        p = (passive_index // (8 * 2)) % 64
-        d = (passive_index // 2) % 8
-        s = passive_index % 2
-
-        # Decode board and position coordinates
-        passive_start_x = p // 8
-        passive_start_y = p % 8
-        direction = d
-        dist = s+1
-
-        # check if valid:
-        if (passive_start_x, passive_start_y, direction, dist) not in valid_passive_moves:
-            print(valid_passive_moves)
-            print(masked_logits[passive_index])
-        assert (passive_start_x, passive_start_y, direction, dist) in valid_passive_moves
-        return (passive_start_x, passive_start_y, direction, dist), passive_index, masked_log_probs, mask
 
 
-    def sample_aggressive(self, policy_output, passive_move, valid_moves):
-        '''
-        From the policy model, sample aggressive action
-        '''
-        aggressive_logits = self.aggressive_logits(policy_output).squeeze()
-        masked_logits, mask = self.mask_aggressive_logits(aggressive_logits, passive_move, valid_moves)
-
-        # get masked probs
-        masked_probs = torch.softmax(masked_logits, dim=-1)
-        masked_log_probs = torch.log_softmax(masked_logits, dim=-1)
-        
-        # Sample aggressive move
-        aggressive_index = torch.multinomial(masked_probs, 1).item()
-
-        # Decode aggressive move
-        a_start_x = aggressive_index // 8
-        a_start_y = aggressive_index % 8
-        
-        # check validity
-        assert ((passive_move),(a_start_x, a_start_y)) in valid_moves
-        return (a_start_x, a_start_y), aggressive_index, masked_log_probs, mask  
-
-                
-    def model_action(self, policy_output):
-        '''
-        Hierarchical combinatorial sampling 
-        First select valid passive move
-        Then subset to legal aggressive moves and sample
-        Return ShobuMove, model passive action index, model aggressive action index, and model unmasked log probabilities
-        '''
-        # Generate legal moves
-        valid_bit_moves = self.board.move_gen()
-        # Convert moves into model-readable format
-        valid_moves = [convert_to_PPOMove(move) for move in valid_bit_moves]
-        # Passive sampling
-        passive_move, passive_index, passive_probs, passive_mask = self.sample_passive(policy_output, valid_moves)
-        # Aggressive sampling
-        aggressive_move, aggressive_index, aggressive_probs, aggressive_mask = self.sample_aggressive(policy_output, passive_move, valid_moves)
-        # ShobuMove conversion
-        move = convert_to_ShobuMove(passive_move, aggressive_move)
-        return move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask
-
-
-    def select_action(self, state, train=True):
+    def select_action(self, state, device, train=True):
         '''
         Select policy from model for a given board state
         '''
@@ -247,13 +118,13 @@ class Shobu_RL(Shobu):
                 self.steps_done += 1 
                 with torch.no_grad():
                     policy_output = self.ppo_model.get_policy(state)
-                    move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.model_action(policy_output)
+                    move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = model_action(policy_output, self.board, device)
                 return move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask
             # opp network moves
             else:
                 with torch.no_grad():
                     policy_output = self.opp.get_policy(state)
-                    move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.model_action(policy_output)
+                    move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = model_action(policy_output, self.board, device)
                 return move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask
         
         # inference
@@ -261,7 +132,7 @@ class Shobu_RL(Shobu):
             self.steps_done += 0.5
             with torch.no_grad():
                 policy_output = self.ppo_model.get_policy(state)
-                move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.model_action(policy_output)
+                move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = model_action(policy_output, self.board, device)
             return move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask
 
     
@@ -282,7 +153,7 @@ class Shobu_RL(Shobu):
             
             # get input move by sampling from policy model
             start_state = torch.tensor(board_state.copy(), device=device, dtype=torch.float32).unsqueeze(0)
-            move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.select_action(start_state, train)
+            move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.select_action(start_state, device, train)
             
             # push to memory if player is the trainable model
             if self.cur_turn == self.model_player:
@@ -291,6 +162,10 @@ class Shobu_RL(Shobu):
             # apply move
             self.board = self.board.apply(move)
             
+            if not train:
+                print("After move")
+                print(self.board)
+            
             # check for wincon
             if (winner := self.board.check_winner()) is not None:
                 if self.cur_turn == self.model_player:
@@ -298,10 +173,6 @@ class Shobu_RL(Shobu):
                 else:
                     print(f"The winner is the opponent.")
                 return memory
-            
-            if not train:
-                print("After move")
-                print(self.board)
             
             # flip board
             self.board.flip()
@@ -417,8 +288,8 @@ class Shobu_RL(Shobu):
 
                         # ratio loss on passive and aggressive move probs
                         policy_outputs = self.ppo_model.get_policy(state_batch)
-                        passive_logits = self.passive_logits(policy_outputs)
-                        aggressive_logits = self.aggressive_logits(policy_outputs)
+                        passive_logits = get_passive_logits(policy_outputs)
+                        aggressive_logits = get_aggressive_logits(policy_outputs)
                         new_passive_logprobs = torch.log_softmax(passive_logits, dim=1).gather(1, passive_actions.unsqueeze(1))
                         new_aggressive_logprobs = torch.log_softmax(aggressive_logits, dim=1).gather(1, aggressive_actions.unsqueeze(1))  
                         new_logprobs_joint = new_passive_logprobs + new_aggressive_logprobs

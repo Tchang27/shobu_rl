@@ -1,6 +1,7 @@
 # shobu_rl
 ## Training runs:
 - Run 1:
+    - Goal: Trial run
     - Intermediate reward is sum of model pieces - sum of opponent pieces, multiplied by 0.1
     - Win reward is 10
     - Draw penalty set to half of loss penalty, which is -win reward
@@ -16,19 +17,23 @@
         - LAMBDA = 0.9
         - Learning rates: 3e-4,3e-4,1e-4
     - Result: model got good at stalling
+
 - Run 2:
-    - Intermediate reward is piece discrepancy multiplied by 0.2 + -0.01 for each step taken
+    - Goal: Less draws, numerically stabilize logits and losses
+    - No intermediate reward
     - Win reward is 10
-    - Draw penalty set equal to loss penalty, which is -win reward
+    - Loss penalty is -10
+    - Draw penalty is -15
+    - Update opponent pool every 2000 episodes / 40 training steps
     - Hyperparameters:
-        - Batch size: 128
-        - epochs: 4
-        - training update: every 20 episodes
+        - Batch size: 512
+        - epochs: 3
+        - training update: every 50 episodes
         - max turns: 100
         - C1 = 0.5
-        - C2 = 0.01
+        - C2 = 0.05
         - EPSILON = 0.2
-        - GAMMA = 0.99
-        - LAMBDA = 0.9
-        - Learning rates: 3e-4,3e-4,1e-4
-    - Result: 
+        - GAMMA = 0.995
+        - LAMBDA = 0.95
+        - Learning rates: 1e-4,1e-4,1e-4
+    - Result: model achieving higher win rates + basic strategy

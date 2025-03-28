@@ -2,6 +2,9 @@ import abc
 import random
 
 from shobu import Shobu, ShobuMove
+from models import Shobu_PPO
+from rl_utils import model_action
+import torch
 
 
 class Agent(abc.ABC):
@@ -51,3 +54,26 @@ class UserAgent(Agent):
 
 
 # TODO Flask agent, RL agent, etc
+class RLAgent(Agent):
+	"""
+	A `RLAgent` is a bot player which uses a trained PPO model
+	to select moves.
+	"""
+	def __init__(self, checkpoint_path: str):
+		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")   
+		self.model = Shobu_PPO()
+		self.model.to(self.device)
+		self.model.load_state_dict(torch.load(checkpoint_path))
+		self.model.eval()
+
+	def move(self, board: Shobu):
+		with torch.no_grad():
+			state = board.as_matrix()
+			policy_output = self.model.get_policy(state)
+			move, _, _, _, _, _, _ = model_action(policy_output, board, self.device)
+		return move
+    
+    
+    
+    
+    
