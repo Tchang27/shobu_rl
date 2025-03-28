@@ -17,7 +17,7 @@ from itertools import combinations
 MAX_TURNS = 100
 MAX_GAMES = 500000
 BATCH_SIZE = 256
-EPOCHS = 3
+EPOCHS = 4
 ON_POLICY = 50
 
 
@@ -146,14 +146,16 @@ class Shobu_RL():
                 board_state = self.board.as_matrix()
                 start_state = torch.tensor(board_state.copy(), device=device, dtype=torch.float32).unsqueeze(0)
                 move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.select_action(start_state, device)
-                # push to memory if player is the trainable model
-                if self.cur_turn == self.model_player:
-                    memory.push(start_state, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask, 0, 0)
             else:
                 move = self.select_opponent_action(self.board, device)
                    
             # apply move
             self.board = self.board.apply(move)
+            if self.cur_turn == self.model_player:
+                #push to memory if player is the trainable model
+                board_state = self.board.as_matrix()
+                after_state = torch.tensor(board_state.copy(), device=device, dtype=torch.float32).unsqueeze(0)
+                memory.push(start_state, after_state, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask, 0, 0)
             
             if not train:
                 print("After move")
@@ -210,30 +212,31 @@ class Shobu_RL():
             print(self.board)
             print(f"Total moves:{self.steps_done}")
 
-            # compute advantages for PPO loss
+            # compute returns and advantages for PPO loss
             transitions = episode_memory.memory
             batch = Transition(*zip(*transitions))
             state_batch = torch.cat(batch.state)
+            after_state_batch = torch.cat(batch.after_state)
             with torch.no_grad():
                 # get q values from value function
                 q_values = self.ppo_model.value_function(state_batch)
-                # intermediate rewards
+                # intermediate rewards using resulting states (after action)
                 if sparse:
-                    rewards = [0 for s in state_batch]
+                    rewards = [0 for s in after_state_batch]
                 else:
-                    rewards = [intermediate_reward(s, i, MAX_TURNS) for i,s in enumerate(state_batch)]
+                    rewards = [intermediate_reward(state=s, step=i, max_step=MAX_TURNS) for i,s in enumerate(after_state_batch)]
                 # win/loss reward - discourage stalling
                 if self.board.check_winner():
                     rewards[-1] += WIN_REWARD if (self.board.check_winner() and (self.cur_turn==self.model_player)) else -WIN_REWARD
                 else:
-                    rewards[-1] += -WIN_REWARD*1.5
+                    rewards[-1] += -WIN_REWARD*0.5
                 # compute returns + advantages
                 returns, advantages = compute_returns(rewards=rewards, values=q_values, device=device, gamma=GAMMA, lam=LAMBDA)
             # add advantage and returns to queue of transitions
             transitions_with_advantage = []
             for i in range(len(episode_memory.memory)):
                 t = episode_memory.memory[i]
-                transitions_with_advantage.append(Transition(t.state, t.passive, t.aggressive, t.passive_probs, t.aggressive_probs, t.passive_mask, t.aggressive_mask, advantages[i], returns[i]))
+                transitions_with_advantage.append(Transition(t.state, t.after_state, t.passive, t.aggressive, t.passive_probs, t.aggressive_probs, t.passive_mask, t.aggressive_mask, advantages[i], returns[i]))
             for transition in transitions_with_advantage:
                 train_memory.push(*transition) 
          
@@ -245,10 +248,12 @@ class Shobu_RL():
             # training step every ON_POLICY episodes
             if ((episode+1) % ON_POLICY) == 0:
                 # normalize returns and advantages
+                #returns = torch.stack([t.returns for t in train_memory.memory])
+                #returns = (returns - returns.mean()) / (returns.std() + 1e-8)
                 advantages = torch.stack([t.advantages for t in train_memory.memory])
                 advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
                 for i, t in enumerate(train_memory.memory):
-                    train_memory.memory[i] = Transition(t.state, t.passive, t.aggressive, t.passive_probs, t.aggressive_probs, t.passive_mask, t.aggressive_mask, advantages[i], t.returns)
+                    train_memory.memory[i] = Transition(t.state, t.after_state, t.passive, t.aggressive, t.passive_probs, t.aggressive_probs, t.passive_mask, t.aggressive_mask, advantages[i], t.returns)
                     
                 # train for EPOCHS epochs
                 for e in range(EPOCHS):
@@ -295,7 +300,7 @@ class Shobu_RL():
 
                         # value function loss
                         values = self.ppo_model.value_function(state_batch).squeeze()
-                        value_loss = F.huber_loss(values, returns)
+                        value_loss = F.mse_loss(values, returns)
 
                         # entropy loss
                         passive_logits[passive_masks == 0] = -1e10
@@ -306,7 +311,7 @@ class Shobu_RL():
                         aggressive_entropy_loss = - (entropy_aggressive.mean())
 
                         # Final PPO loss
-                        total_loss = policy_loss + (C1*value_loss) + C2 * (passive_entropy_loss) + C3 * (aggressive_entropy_loss)
+                        total_loss = policy_loss + (C1*value_loss) + (C2 * passive_entropy_loss) + (C3 * aggressive_entropy_loss)
 
                         # backprop and optimize
                         opt.zero_grad()
@@ -338,7 +343,7 @@ class Shobu_RL():
                     reward_list.append(avg_epoch_reward)
 
                 # lr scheduler if needed
-                #scheduler.step()
+                scheduler.step()
                 
                 # new memory queue - PPO requires fresh data
                 train_memory = ReplayMemory(capacity=MEMORY_SIZE)

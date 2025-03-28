@@ -48,7 +48,7 @@ def seed(seed=1000):
 #### REPLAY BUFFER ####
 
 Transition = namedtuple('Transition',
-                        ('state', 'passive', 'aggressive', 'passive_probs','aggressive_probs', 'passive_mask', 'aggressive_mask', 'advantages', 'returns'))
+                        ('state', 'after_state', 'passive', 'aggressive', 'passive_probs','aggressive_probs', 'passive_mask', 'aggressive_mask', 'advantages', 'returns'))
 
 
 class ReplayMemory(object):
@@ -291,7 +291,7 @@ def intermediate_reward(state, step, max_step) -> torch.Tensor:
     # reward for piece discrepancy
     piece_discrep = torch.sum(state)
 
-    return (-0.01)*(step) #+(piece_discrep/16)
+    return (-0.01)*(step) +(piece_discrep/16)
 
     
 #### PLOTTING ####    
@@ -439,7 +439,7 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, p_entr
     ax5.set_ylim(0, 1)
 
 
-    plt.title(f"Training Progress Episode {episode+1} (Displaying Last 2000 Episodes)")
+    plt.title(f"Training Progress Episode {episode+1}")
     fig.tight_layout()  # Adjust layout for better spacing
     plt.grid()
     plt.show()
