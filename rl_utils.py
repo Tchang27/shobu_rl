@@ -122,8 +122,13 @@ def get_passive_logits(policy_output):
     '''
     # Extract passive probabilities
     p_pos = policy_output["passive"]["position"]
+    p_dir = policy_output["passive"]["direction"]
+    p_dist = policy_output["passive"]["distance"]
 
-    passive_logits = p_pos
+    # Create passive joint distribution tensor
+    passive_logits = p_pos.unsqueeze(-1).unsqueeze(-1) + p_dir.unsqueeze(1).unsqueeze(-1) + p_dist.unsqueeze(1).unsqueeze(1)
+    # Flatten the passive move probabilities
+    passive_logits = passive_logits.flatten(start_dim=1)
     return passive_logits
 
 
@@ -286,16 +291,20 @@ def intermediate_reward(state, step, max_step) -> torch.Tensor:
     # reward for piece discrepancy
     piece_discrep = torch.sum(state)
 
-    return (piece_discrep/16) #+ (-0.01)*(step/max_step)
+    return (-0.01)*(step) #+(piece_discrep/16)
 
     
 #### PLOTTING ####    
     
 def rolling_win_rate(win_list, window_size=25):
-    """Calculate rolling win rate over the last `window_size` episodes."""
+    """Calculate moving_average rolling win rate over the last `window_size` episodes."""
     if len(win_list) < window_size:
         return np.cumsum(win_list) / np.arange(1, len(win_list) + 1)
     return moving_average(win_list, window_size)
+
+def rolling_exp_win_rate(win_list, window_size=25):
+    """Calculate exponential_moving_average rolling win rate over the last `window_size` episodes."""
+    return exponential_moving_average(win_list, window_size)
 
 
 def moving_average(values, window_size=10):
@@ -303,7 +312,16 @@ def moving_average(values, window_size=10):
     return np.convolve(values, np.ones(window_size)/window_size, mode='valid')
 
 
-def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, entropy_loss_list, win_list, opp_win_list, draw_list, plot_every: int, episode: int):
+def exponential_moving_average(values, alpha=0.05):
+    """Compute moving average to smooth the reward curve."""
+    ema = np.zeros_like(values, dtype=np.float64)
+    ema[0] = values[0]
+    for i in range(1, len(values)):
+        ema[i] = alpha * values[i] + (1 - alpha) * ema[i - 1]
+    return ema
+
+
+def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, p_entropy_loss_list, a_entropy_loss_list, win_list, opp_win_list, draw_list, plot_every: int, episode: int):
     '''
     Plot training progress
     
@@ -323,9 +341,8 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, entrop
     ax1.set_ylabel("Return", color="tab:blue")
     ax1.plot(reward_list, label="Raw Batch Return", alpha=0.4, color="tab:blue")
     
-    if len(reward_list) > plot_every:
-        smoothed_rewards = moving_average(reward_list, window_size=(plot_every))
-        ax1.plot(range(len(smoothed_rewards)), smoothed_rewards, label="Smoothed Batch Return", color="blue", linewidth=5)
+    smoothed_rewards = exponential_moving_average(reward_list)
+    ax1.plot(range(len(smoothed_rewards)), smoothed_rewards, label="Smoothed Batch Return", color="blue", linewidth=5)
 
     ax1.tick_params(axis="y", labelcolor="tab:blue")
 
@@ -334,9 +351,8 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, entrop
     ax2.set_ylabel("PPO Loss", color="tab:orange")  
     ax2.plot(ppo_loss_list, label=" Raw Batch PPO Loss", alpha=0.2, color="tab:orange")
     
-    if len(ppo_loss_list) > plot_every:
-        smoothed_loss = moving_average(ppo_loss_list, window_size=(plot_every))
-        ax2.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch PPO Loss", color="orange", linewidth=5)
+    smoothed_loss = exponential_moving_average(ppo_loss_list)
+    ax2.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch PPO Loss", color="orange", linewidth=5)
 
     ax2.tick_params(axis="y", labelcolor="tab:orange")
     
@@ -346,46 +362,53 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, entrop
     ax6.set_ylabel("Value Loss", color="tab:purple")  
     ax6.plot(value_loss_list, label=" Raw Batch Value Loss", alpha=0.2, color="tab:purple")
     
-    if len(value_loss_list) > plot_every:
-        smoothed_loss = moving_average(value_loss_list, window_size=(plot_every))
-        ax6.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Value Loss", color="purple", linewidth=5)
+    smoothed_loss = exponential_moving_average(value_loss_list)
+    ax6.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Value Loss", color="purple", linewidth=5)
 
     ax6.tick_params(axis="y", labelcolor="tab:purple")
     
     # Plot losses (right y-axis)
     ax7 = ax1.twinx()  
     ax7.spines["right"].set_position(("outward", 80)) 
-    ax7.set_ylabel("Entropy Loss", color="tab:green")  
-    ax7.plot(entropy_loss_list, label=" Raw Batch Entropy Loss", alpha=0.2, color="tab:green")
+    ax7.set_ylabel("Passive Entropy Loss", color="tab:green")  
+    ax7.plot(p_entropy_loss_list, label=" Raw Batch Passive Entropy Loss", alpha=0.2, color="tab:green")
     
-    if len(entropy_loss_list) > plot_every:
-        smoothed_loss = moving_average(entropy_loss_list, window_size=(plot_every))
-        ax7.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Entropy Loss", color="green", linewidth=5)
+    smoothed_loss = exponential_moving_average(p_entropy_loss_list)
+    ax7.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Passive Entropy Loss", color="green", linewidth=5)
 
     ax7.tick_params(axis="y", labelcolor="tab:green")
     
     # Plot losses (right y-axis)
     ax8 = ax1.twinx()  
     ax8.spines["right"].set_position(("outward", 120)) 
-    ax8.set_ylabel("Loss", color="tab:red")  
-    ax8.plot(loss_list, label=" Raw Batch Loss", alpha=0.4, color="tab:red")
+    ax8.set_ylabel("Aggressive Entropy Loss", color="tab:pink")  
+    ax8.plot(a_entropy_loss_list, label=" Raw Batch Aggressive Entropy Loss", alpha=0.2, color="tab:pink")
     
-    if len(entropy_loss_list) > plot_every:
-        smoothed_loss = moving_average(loss_list, window_size=(plot_every))
-        ax8.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Loss", color="red", linewidth=5)
+    smoothed_loss = exponential_moving_average(a_entropy_loss_list)
+    ax8.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Aggressive Entropy Loss", color="pink", linewidth=5)
 
-    ax8.tick_params(axis="y", labelcolor="tab:red")
+    ax8.tick_params(axis="y", labelcolor="tab:pink")
+    
+    # Plot losses (right y-axis)
+    ax9 = ax1.twinx()  
+    ax9.spines["right"].set_position(("outward", 160)) 
+    ax9.set_ylabel("Loss", color="tab:red")  
+    ax9.plot(loss_list, label=" Raw Batch Loss", alpha=0.4, color="tab:red")
+    
+    smoothed_loss = exponential_moving_average(loss_list)
+    ax9.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Loss", color="red", linewidth=5)
+
+    ax9.tick_params(axis="y", labelcolor="tab:red")
 
     # Plot win rate for model
     fig2, ax3 = plt.subplots(figsize=(12, 8))
     ax3.set_xlabel("Episode")
     ax3.spines["right"].set_position(("outward", 60))  # Move win rate axis outward
-    ax3.set_ylabel(f"Rolling Win Rate (Last {plot_every})", color="tab:green")
+    ax3.set_ylabel(f"Rolling Win Rate)", color="tab:green")
 
     # Calculate and plot rolling win rate
-    if len(win_list) > plot_every:
-        rolling_rate = rolling_win_rate(win_list, window_size=(plot_every))
-        ax3.plot(range(len(rolling_rate)), rolling_rate, alpha=0.2,label="Rolling Win Rate", color="green", linewidth=3)
+    rolling_rate = exponential_moving_average(win_list)
+    ax3.plot(range(len(rolling_rate)), rolling_rate, alpha=0.2,label="Rolling Win Rate", color="green", linewidth=3)
 
     ax3.tick_params(axis="y", labelcolor="tab:green")
     ax3.set_ylim(0, 1)
@@ -394,12 +417,11 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, entrop
     # Plot draw rate
     ax4 = ax3.twinx()
     ax4.spines["right"]  # Move win rate axis outward
-    ax4.set_ylabel(f"Rolling Draw Rate (Last {plot_every})", color="tab:purple")
+    ax4.set_ylabel(f"Rolling Draw Rate)", color="tab:purple")
 
     # Calculate and plot rolling draw rate
-    if len(draw_list) > plot_every:
-        rolling_drawrate = rolling_win_rate(draw_list, window_size=(plot_every))
-        ax4.plot(range(len(rolling_drawrate)), rolling_drawrate, alpha=0.2,label="Rolling Draw Rate", color="purple", linewidth=3)
+    rolling_drawrate = exponential_moving_average(draw_list)
+    ax4.plot(range(len(rolling_drawrate)), rolling_drawrate, alpha=0.2,label="Rolling Draw Rate", color="purple", linewidth=3)
 
     ax4.tick_params(axis="y", labelcolor="tab:purple")
     ax4.set_ylim(0, 1)
@@ -407,18 +429,17 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, entrop
     # Plot win rate for opp
     ax5 = ax3.twinx()
     ax5.spines["right"].set_position(("outward", 60))  # Move win rate axis outward
-    ax5.set_ylabel(f"Rolling Opponent Win Rate (Last {plot_every})", color="tab:cyan")
+    ax5.set_ylabel(f"Rolling Opponent Win Rate)", color="tab:cyan")
 
     # Calculate and plot rolling draw rate
-    if len(draw_list) > plot_every:
-        rolling_opprate = rolling_win_rate(opp_win_list, window_size=(plot_every))
-        ax5.plot(range(len(rolling_opprate)), rolling_opprate, alpha=0.2,label="Rolling Opponent Win Rate", color="cyan", linewidth=3)
+    rolling_opprate = exponential_moving_average(opp_win_list)
+    ax5.plot(range(len(rolling_opprate)), rolling_opprate, alpha=0.2,label="Rolling Opponent Win Rate", color="cyan", linewidth=3)
 
     ax5.tick_params(axis="y", labelcolor="tab:cyan")
     ax5.set_ylim(0, 1)
 
 
-    plt.title(f"Training Progress (Episode {episode+1})")
+    plt.title(f"Training Progress Episode {episode+1} (Displaying Last 2000 Episodes)")
     fig.tight_layout()  # Adjust layout for better spacing
     plt.grid()
     plt.show()

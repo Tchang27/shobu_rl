@@ -7,7 +7,6 @@ if __name__ == '__main__':
 	_, elos = round_robin([
 		RandomAgent(),
 		RLAgent("model_weights/ppo_checkpoint_2000.pth"), 
-		RLAgent("model_weights/ppo_checkpoint_12000.pth"),
 	])
 
 	print(elos)

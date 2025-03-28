@@ -114,7 +114,7 @@ def round_robin(
 	rounds = [[(rated_agents, max_moves_per_game, p[0], p[1]) for p in product(range(num_players), repeat=2) if p[0] != p[1]]] * num_rounds
 	win_matrix = np.zeros((num_players, num_players))
 
-	with Pool(16) as p:
+	with Pool(8) as p:
 		for round in tqdm(rounds):
 			random.shuffle(round)  # this may be good or bad idea
 			num_decisive = 0

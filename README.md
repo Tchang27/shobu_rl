@@ -20,20 +20,21 @@
 
 - Run 2:
     - Goal: Less draws, numerically stabilize logits and losses
+    - Increase model complexity (inspired by AlphaGo)
     - No intermediate reward
     - Win reward is 10
     - Loss penalty is -10
     - Draw penalty is -15
-    - Update opponent pool every 2000 episodes / 40 training steps
+    - Update opponent pool every 5000 episodes / 100 training steps
     - Hyperparameters:
         - Batch size: 512
         - epochs: 3
         - training update: every 50 episodes
         - max turns: 100
         - C1 = 0.5
-        - C2 = 0.05
+        - C2 = 0.1
         - EPSILON = 0.2
         - GAMMA = 0.995
         - LAMBDA = 0.95
-        - Learning rates: 1e-4,1e-4,1e-4
-    - Result: model achieving higher win rates + basic strategy
+        - Learning rates: 3e-4,3e-4,3e-4
+    - Result:
