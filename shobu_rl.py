@@ -247,9 +247,7 @@ class Shobu_RL():
             
             # training step every ON_POLICY episodes
             if ((episode+1) % ON_POLICY) == 0:
-                # normalize returns and advantages
-                #returns = torch.stack([t.returns for t in train_memory.memory])
-                #returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+                # normalize advantages
                 advantages = torch.stack([t.advantages for t in train_memory.memory])
                 advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
                 for i, t in enumerate(train_memory.memory):

@@ -483,8 +483,10 @@ class Shobu:
 			bits = np.float32(np.unpackbits(np.expand_dims(as_bytes, axis=1), axis=1))
 			bits = np.flip(bits, axis=1)
 			return bits
-		board = process_bitboard(self.black) - process_bitboard(self.white)
-		return np.expand_dims(board, axis=0)
+		#board = process_bitboard(self.black) - process_bitboard(self.white)
+		#return np.expand_dims(board, axis=0)
+		board = np.stack((process_bitboard(self.black),process_bitboard(self.white)))
+		return board
 
 	def flip(self):
 		"""
