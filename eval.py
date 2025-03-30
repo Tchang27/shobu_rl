@@ -37,7 +37,7 @@ def play_game(
 		# update board rep
 		if type(black_player) is RLAgent:
 			board_reps = get_board_representation(board, board_reps, torch.device('cpu'))
-		else:
+		elif type(white_player) is RLAgent:
 			board.flip()
 			board_reps = get_board_representation(board, board_reps, torch.device('cpu'))
 			board.flip()
