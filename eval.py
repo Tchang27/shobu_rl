@@ -5,8 +5,10 @@ from multiprocessing import Pool
 from tqdm import tqdm
 
 import numpy as np
-from agent import Agent
+from agent import Agent, RLAgent
 from shobu import Player, Shobu
+import torch
+from rl_utils import get_board_representation
 
 """
 This module defines helpful functions for evaluating the relative strengths
@@ -25,15 +27,31 @@ def play_game(
 	"""
 	board = initial_board_state
 	half_ply = 0
+	board_reps = [torch.zeros(8,4,4, device = torch.device('cpu'), dtype=torch.float32) for _ in range(8)]
 	while max_moves == None or half_ply / 2 < max_moves:
 		if print_info: print(board)
 		if (winner := board.check_winner()) is not None:
 			if print_info: print(f"The winner is {winner}.")
 			return winner
-		if board.next_mover == Player.BLACK:
-			move = black_player.move(board)
+		
+		# update board rep
+		if type(black_player) is RLAgent:
+			board_reps = get_board_representation(board, board_reps, torch.device('cpu'))
 		else:
-			move = white_player.move(board)
+			board.flip()
+			board_reps = get_board_representation(board, board_reps, torch.device('cpu'))
+			board.flip()
+			
+		if board.next_mover == Player.BLACK:
+			if type(black_player) is RLAgent: 
+				move = black_player.move(board, board_reps)
+			else:
+				move = black_player.move(board)
+		else:
+			if type(white_player) is RLAgent: 
+				move = white_player.move(board, board_reps)
+			else:
+				move = white_player.move(board)
 		board = board.apply(move)
 		half_ply += 1
 
@@ -114,7 +132,7 @@ def round_robin(
 	rounds = [[(rated_agents, max_moves_per_game, p[0], p[1]) for p in product(range(num_players), repeat=2) if p[0] != p[1]]] * num_rounds
 	win_matrix = np.zeros((num_players, num_players))
 
-	with Pool(8) as p:
+	with Pool(12) as p:
 		for round in tqdm(rounds):
 			random.shuffle(round)  # this may be good or bad idea
 			num_decisive = 0
