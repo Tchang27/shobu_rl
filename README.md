@@ -37,4 +37,33 @@
         - GAMMA = 0.995
         - LAMBDA = 0.95
         - Learning rates: 3e-4,3e-4,3e-4
-    - Result:
+    - Result: model learning random actions (ie not capturing any useful information)
+
+- Run 3:
+    - Goal: model needs to capture information/strategies
+    - Increase model complexity (inspired by AlphaGo)
+    - Split up entropy loss into passive/aggressive
+    - Fix action masking and sampling
+    - Board representation overhaul
+        - Different boards for each subboard
+        - Different boards for each piece color
+        - Store past 8 baord states (after each player move)
+        - 64 x 4 x 4 image
+    - No intermediate reward
+    - Win reward is 1
+    - Loss penalty is -1
+    - Draw penalty is -1
+    - Update opponent pool every 2000 episodes, start with random agent
+    - Hyperparameters:
+        - Batch size: 256
+        - epochs: 4
+        - training update: every 50 episodes
+        - max turns: 50
+        - C1 = 1
+        - C2 = 0.03
+        - C3 = 0.015
+        - EPSILON = 0.2
+        - GAMMA = 0.995
+        - LAMBDA = 0.95
+        - Learning rates: 2e-6,2e-6,2e-6
+    - Result: 

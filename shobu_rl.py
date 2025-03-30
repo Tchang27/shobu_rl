@@ -336,7 +336,7 @@ class Shobu_RL():
                         # backprop and optimize
                         opt.zero_grad()
                         total_loss.backward()
-                        total_norm = torch.nn.utils.clip_grad_norm_(self.ppo_model.parameters(), max_norm=1.0)
+                        total_norm = torch.nn.utils.clip_grad_norm_(self.ppo_model.parameters(), max_norm=5.0)
                         print(total_norm.item())
                         opt.step()
 
