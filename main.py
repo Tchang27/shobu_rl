@@ -6,7 +6,9 @@ if __name__ == '__main__':
 	# Hopefully our players will be more interesting than this :)
 	_, elos = round_robin([
 		RandomAgent(),
-		RLAgent("model_weights/ppo_checkpoint_2000.pth"), 
+		RandomAgent(),
+		RLAgent("model_weights/ppo_checkpoint_8000.pth"), 
+		RLAgent("model_weights/ppo_checkpoint_8000.pth"), 
 	])
 
 	print(elos)

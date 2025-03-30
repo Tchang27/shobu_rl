@@ -485,7 +485,17 @@ class Shobu:
 			return bits
 		#board = process_bitboard(self.black) - process_bitboard(self.white)
 		#return np.expand_dims(board, axis=0)
-		board = np.stack((process_bitboard(self.black),process_bitboard(self.white)))
+		blackboard = process_bitboard(self.black)
+		whiteboard = process_bitboard(self.white)
+		b1 = blackboard[:4,:4]
+		b2 = blackboard[:4,4:]
+		b3 = blackboard[4:,:4]
+		b4 = blackboard[4:,4:]
+		e1 = whiteboard[:4,:4]
+		e2 = whiteboard[:4,4:]
+		e3 = whiteboard[4:,:4]
+		e4 = whiteboard[4:,4:]
+		board = np.stack((b1,b2,b3,b4,e1,e2,e3,e4))
 		return board
 
 	def flip(self):

@@ -11,21 +11,22 @@ import random
 from collections import deque
 import time
 from itertools import combinations
+from torch.distributions import Categorical
 
 # hyperparameters
 # training parameters
 MAX_TURNS = 100
-MAX_GAMES = 500000
+MAX_GAMES = 100000
 BATCH_SIZE = 256
-EPOCHS = 4
+EPOCHS = 6
 ON_POLICY = 50
 
 
 # Value function loss weight
-C1 = 0.5
+C1 = 1.0
 # Entropy loss weight
-C2 = 0.05
-C3 = 0.01
+C2 = 0.03
+C3 = 0.015
 # Clipped PPO parameter
 EPSILON = 0.2
 # Discount factor parameters
@@ -36,7 +37,7 @@ MEMORY_SIZE = 500000
 # win reward
 WIN_REWARD = 1
 # add new opponent every UPDATE_OPPS episodes
-UPDATE_OPPS = 5000
+UPDATE_OPPS = 2000
 # max number of opponents to track at a given time
 OPP_QUEUE_LENGTH = 8
 device = torch.device(
@@ -63,6 +64,9 @@ class Shobu_RL():
         self.model_player = random.choice([-1, 1])
         # always start with black
         self.cur_turn = -1
+        # board representations - separate boards for each subboard and piece type, with history of 8 past states
+        self.board_reps = [torch.zeros(8,4,4, device=device, dtype=torch.float32) for _ in range(8)]
+        self.opp_board_reps = [torch.zeros(8,4,4, device=device, dtype=torch.float32) for _ in range(8)]
 
 
     def set_model(self, ppo_model) -> None:
@@ -101,13 +105,10 @@ class Shobu_RL():
             del self.opponent_pool[mid_index]
 
 
-    def select_action(self, state, device, train=True):
+    def select_action(self, state, device):
         '''
         Select policy from model for a given board state
-        '''
-        # if train, count steps
-        if train:
-            self.steps_done += 1 
+        ''' 
         with torch.no_grad():
             policy_output = self.ppo_model.get_policy(state)
             move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = model_action(policy_output, self.board, device)
@@ -118,8 +119,7 @@ class Shobu_RL():
         if type(self.opp) is RandomAgent:
             move = self.opp.move(board)
         else:
-            board_state = board.as_matrix()
-            start_state = torch.tensor(board_state.copy(), device=device, dtype=torch.float32).unsqueeze(0)
+            start_state = torch.concatenate(self.opp_board_reps).unsqueeze(0)
             with torch.no_grad():
                 policy_output = self.opp.get_policy(start_state)
                 move, _, _, _, _, _, _ = model_action(policy_output, self.board, device)
@@ -137,14 +137,29 @@ class Shobu_RL():
             else:
                 self.opp = random.choice(self.opponent_pool)
           
-        while (self.steps_done < MAX_TURNS):  
+        while (self.steps_done < MAX_TURNS):
             if not train:
                 print("Current board")
                 print(self.board)
                 
+            # update board representation for model
             if self.cur_turn == self.model_player:
-                board_state = self.board.as_matrix()
-                start_state = torch.tensor(board_state.copy(), device=device, dtype=torch.float32).unsqueeze(0)
+                self.board_reps = get_board_representation(self.board, self.board_reps, device)
+            else:
+                self.board.flip()
+                self.board_reps = get_board_representation(self.board, self.board_reps, device)
+                self.board.flip()
+                
+            # update board representation for opp
+            if self.cur_turn != self.model_player:
+                self.opp_board_reps = get_board_representation(self.board, self.opp_board_reps, device)
+            else:
+                self.board.flip()
+                self.opp_board_reps = get_board_representation(self.board, self.opp_board_reps, device)
+                self.board.flip()
+                
+            if self.cur_turn == self.model_player:
+                start_state = torch.concatenate(self.board_reps).unsqueeze(0)
                 move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask = self.select_action(start_state, device)
             else:
                 move = self.select_opponent_action(self.board, device)
@@ -153,9 +168,7 @@ class Shobu_RL():
             self.board = self.board.apply(move)
             if self.cur_turn == self.model_player:
                 #push to memory if player is the trainable model
-                board_state = self.board.as_matrix()
-                after_state = torch.tensor(board_state.copy(), device=device, dtype=torch.float32).unsqueeze(0)
-                memory.push(start_state, after_state, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask, 0, 0)
+                memory.push(start_state, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask, 0, 0)
             
             if not train:
                 print("After move")
@@ -173,6 +186,7 @@ class Shobu_RL():
             self.board.flip()
             # next turn
             self.cur_turn *= -1
+            self.steps_done += 1 
         
         # return memory of transitions
         return memory   
@@ -193,6 +207,7 @@ class Shobu_RL():
         opp_win_list = []
         # memory for caching states, action, next state, and reward
         train_memory = ReplayMemory(capacity=MEMORY_SIZE)
+        self.ppo_model.train()
         
         for episode in range(MAX_GAMES):
             # init a new game
@@ -201,42 +216,47 @@ class Shobu_RL():
             
             # play game
             t0 = time.time()
-            self.ppo_model.eval()
             episode_memory = ReplayMemory(capacity=MEMORY_SIZE)
             episode_memory = self.model_play_game(episode_memory)
-            self.ppo_model.train()
             t1 = time.time()
             print(f"\n Game simulated in: {t1-t0}")
             
             # Display ending board for qualitative check
-            print(self.board)
-            print(f"Total moves:{self.steps_done}")
+#             print(f"Board from model view: {self.cur_turn==self.model_player}")
+#             print(self.board)
+#             print(f"Total moves:{self.steps_done}")
 
             # compute returns and advantages for PPO loss
             transitions = episode_memory.memory
             batch = Transition(*zip(*transitions))
             state_batch = torch.cat(batch.state)
-            after_state_batch = torch.cat(batch.after_state)
+            
             with torch.no_grad():
                 # get q values from value function
                 q_values = self.ppo_model.value_function(state_batch)
                 # intermediate rewards using resulting states (after action)
                 if sparse:
-                    rewards = [0 for s in after_state_batch]
+                    rewards = [0 for s in state_batch]
                 else:
-                    rewards = [intermediate_reward(state=s, step=i, max_step=MAX_TURNS) for i,s in enumerate(after_state_batch)]
+                    rewards = [intermediate_reward(state=s, step=i, max_step=MAX_TURNS) for i,s in enumerate(state_batch)]
+                # shift rewards to reflect reward after action
+                rewards = rewards[1:]
                 # win/loss reward - discourage stalling
                 if self.board.check_winner():
-                    rewards[-1] += WIN_REWARD if (self.board.check_winner() and (self.cur_turn==self.model_player)) else -WIN_REWARD
+                    if (self.board.check_winner() and (self.cur_turn==self.model_player)): 
+                        rewards.append(WIN_REWARD)
+                    else:
+                        rewards.append(-WIN_REWARD)
                 else:
-                    rewards[-1] += -WIN_REWARD*0.5
+                    rewards.append(-WIN_REWARD)
                 # compute returns + advantages
                 returns, advantages = compute_returns(rewards=rewards, values=q_values, device=device, gamma=GAMMA, lam=LAMBDA)
+                
             # add advantage and returns to queue of transitions
             transitions_with_advantage = []
             for i in range(len(episode_memory.memory)):
                 t = episode_memory.memory[i]
-                transitions_with_advantage.append(Transition(t.state, t.after_state, t.passive, t.aggressive, t.passive_probs, t.aggressive_probs, t.passive_mask, t.aggressive_mask, advantages[i], returns[i]))
+                transitions_with_advantage.append(Transition(t.state, t.passive, t.aggressive, t.passive_probs, t.aggressive_probs, t.passive_mask, t.aggressive_mask, advantages[i], returns[i]))
             for transition in transitions_with_advantage:
                 train_memory.push(*transition) 
          
@@ -251,7 +271,7 @@ class Shobu_RL():
                 advantages = torch.stack([t.advantages for t in train_memory.memory])
                 advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
                 for i, t in enumerate(train_memory.memory):
-                    train_memory.memory[i] = Transition(t.state, t.after_state, t.passive, t.aggressive, t.passive_probs, t.aggressive_probs, t.passive_mask, t.aggressive_mask, advantages[i], t.returns)
+                    train_memory.memory[i] = Transition(t.state, t.passive, t.aggressive, t.passive_probs, t.aggressive_probs, t.passive_mask, t.aggressive_mask, advantages[i], t.returns)
                     
                 # train for EPOCHS epochs
                 for e in range(EPOCHS):
@@ -273,8 +293,8 @@ class Shobu_RL():
                         # get old joint probability
                         passive_actions = torch.tensor(np.stack(batch.passive), device=device, dtype=torch.int64)
                         aggressive_actions = torch.tensor(np.stack(batch.aggressive), device=device, dtype=torch.int64)
-                        old_passive_logprobs = torch.stack(batch.passive_probs).detach().gather(1, passive_actions.unsqueeze(1))
-                        old_aggressive_logprobs = torch.stack(batch.aggressive_probs).detach().gather(1, aggressive_actions.unsqueeze(1))
+                        old_passive_logprobs = torch.stack(batch.passive_probs).detach()
+                        old_aggressive_logprobs = torch.stack(batch.aggressive_probs)
                         old_logprobs_joint = old_passive_logprobs + old_aggressive_logprobs
                         # masks for logits
                         passive_masks = torch.stack(batch.passive_mask)
@@ -287,8 +307,12 @@ class Shobu_RL():
                         policy_outputs = self.ppo_model.get_policy(state_batch)
                         passive_logits = get_passive_logits(policy_outputs)
                         aggressive_logits = get_aggressive_logits(policy_outputs)
-                        new_passive_logprobs = torch.log_softmax(passive_logits, dim=1).gather(1, passive_actions.unsqueeze(1))
-                        new_aggressive_logprobs = torch.log_softmax(aggressive_logits, dim=1).gather(1, aggressive_actions.unsqueeze(1))  
+                        passive_logits, _ = normalized_mask_logits(passive_logits, passive_masks)
+                        aggressive_logits, _ = normalized_mask_logits(aggressive_logits, aggressive_masks)
+                        passive_dist = Categorical(logits=passive_logits)
+                        aggressive_dist = Categorical(logits=aggressive_logits)
+                        new_passive_logprobs = passive_dist.log_prob(passive_actions)
+                        new_aggressive_logprobs = aggressive_dist.log_prob(aggressive_actions) 
                         new_logprobs_joint = new_passive_logprobs + new_aggressive_logprobs
                         ratio = torch.exp(new_logprobs_joint-old_logprobs_joint)
 
@@ -301,20 +325,19 @@ class Shobu_RL():
                         value_loss = F.mse_loss(values, returns)
 
                         # entropy loss
-                        passive_logits[passive_masks == 0] = -1e10
-                        aggressive_logits[aggressive_masks == 0] = -1e10
-                        entropy_passive = torch.distributions.Categorical(logits=passive_logits).entropy()
-                        entropy_aggressive = torch.distributions.Categorical(logits=aggressive_logits).entropy()
+                        entropy_passive = passive_dist.entropy()
+                        entropy_aggressive = aggressive_dist.entropy()
                         passive_entropy_loss = - (entropy_passive.mean())
                         aggressive_entropy_loss = - (entropy_aggressive.mean())
 
                         # Final PPO loss
-                        total_loss = policy_loss + (C1*value_loss) + (C2 * passive_entropy_loss) + (C3 * aggressive_entropy_loss)
+                        total_loss = policy_loss + (C1*value_loss) + (C2*passive_entropy_loss) + (C3*aggressive_entropy_loss)
 
                         # backprop and optimize
                         opt.zero_grad()
                         total_loss.backward()
-                        total_norm = torch.nn.utils.clip_grad_norm_(self.ppo_model.parameters(), max_norm=0.5)
+                        total_norm = torch.nn.utils.clip_grad_norm_(self.ppo_model.parameters(), max_norm=1.0)
+                        print(total_norm.item())
                         opt.step()
 
                         # metrics

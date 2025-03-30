@@ -8,6 +8,7 @@ from IPython.display import clear_output
 import matplotlib.pyplot as plt
 from itertools import combinations
 import os
+from torch.distributions import Categorical
 
 #### CONSTANTS ####
 DIRECTION_MAPPING = {
@@ -48,7 +49,7 @@ def seed(seed=1000):
 #### REPLAY BUFFER ####
 
 Transition = namedtuple('Transition',
-                        ('state', 'after_state', 'passive', 'aggressive', 'passive_probs','aggressive_probs', 'passive_mask', 'aggressive_mask', 'advantages', 'returns'))
+                        ('state', 'passive', 'aggressive', 'passive_probs','aggressive_probs', 'passive_mask', 'aggressive_mask', 'advantages', 'returns'))
 
 
 class ReplayMemory(object):
@@ -76,6 +77,17 @@ class ReplayMemory(object):
     
     
 #### REPRESENTATION CONVERSIONS ####
+
+def get_board_representation(board, previous_boards, device):
+    '''
+    Get board representation: 8 x 8 x 4 x 4
+    board - current Shobu board 
+    previous_boards - list of matrix representations of past boards, in order from recent to oldest
+    '''
+    state = torch.tensor(board.as_matrix(), device=device, dtype=torch.float32)
+    new_boards = [state] + previous_boards[:-1]
+    assert len(new_boards) == len(previous_boards)
+    return new_boards
 
 def convert_to_PPOMove(move: ShobuMove):
     '''
@@ -143,6 +155,22 @@ def get_aggressive_logits(policy_output):
     return aggressive_logits
 
 
+def normalized_mask_logits(logits, mask):
+    valid_logits = logits * mask
+    
+    # Normalize valid logits to have mean 0, std 1
+    if mask.sum() > 1:  # Ensure at least two valid actions
+        valid_mean = (valid_logits.sum(dim=-1, keepdim=True) / mask.sum(dim=-1, keepdim=True))
+        # Compute standard deviation for valid logits
+        valid_std = torch.sqrt(((valid_logits - valid_mean) ** 2 * mask).sum(dim=-1, keepdim=True) / mask.sum(dim=-1, keepdim=True) + 1e-8)
+        normalized_logits = (valid_logits - valid_mean) / (valid_std + 1e-8)
+    else:
+        normalized_logits = valid_logits
+    
+    normalized_logits[mask == 0] = -1e10
+    return normalized_logits, mask
+
+
 def mask_passive_logits(logits, valid_moves, device):
     # create mask
     mask = torch.zeros(logits.shape, device=device, dtype=torch.float32)
@@ -151,7 +179,7 @@ def mask_passive_logits(logits, valid_moves, device):
         pfrom = (px*8) + py 
         pidx = (pfrom * (8 * 2)) + (pd * 2) + (ps-1)
         mask[pidx] = 1
-    logits[mask == 0] = -1e10
+    logits, mask = normalized_mask_logits(logits, mask)
     return logits, mask
 
 
@@ -163,7 +191,7 @@ def mask_aggressive_logits(logits, passive_move, valid_moves, device):
             (ax, ay)= move[1]
             adix = (ax*8) + ay 
             mask[adix] = 1
-    logits[mask == 0] = -1e10
+    logits, mask = normalized_mask_logits(logits, mask)
     return logits, mask
 
 
@@ -181,12 +209,10 @@ def sample_passive(policy_output, valid_moves, device):
     # create mask
     masked_logits, mask = mask_passive_logits(passive_logits, valid_moves, device)
 
-    # get masked probs
-    masked_probs = torch.softmax(masked_logits, dim=-1)
-    masked_log_probs = torch.log_softmax(masked_logits, dim=-1)
-
     # Sample passive move
-    passive_index = torch.multinomial(masked_probs, 1).item()
+    dist = Categorical(logits=masked_logits)
+    passive_index = dist.sample()  
+    masked_log_probs = dist.log_prob(passive_index) 
 
     # Decode the sampled passive move
     p = (passive_index // (8 * 2)) % 64
@@ -200,11 +226,11 @@ def sample_passive(policy_output, valid_moves, device):
     dist = s+1
 
     # check if valid:
-    if (passive_start_x, passive_start_y, direction, dist) not in valid_passive_moves:
+    if (passive_start_x.item(), passive_start_y.item(), direction.item(), dist.item()) not in valid_passive_moves:
         print(valid_passive_moves)
-        print(masked_logits[passive_index])
-    assert (passive_start_x, passive_start_y, direction, dist) in valid_passive_moves
-    return (passive_start_x, passive_start_y, direction, dist), passive_index, masked_log_probs, mask
+        print((passive_start_x, passive_start_y, direction, dist))
+    assert (passive_start_x.item(), passive_start_y.item(), direction.item(), dist.item()) in valid_passive_moves
+    return (passive_start_x.item(), passive_start_y.item(), direction.item(), dist.item()), passive_index.item(), masked_log_probs, mask
 
 
 def sample_aggressive(policy_output, passive_move, valid_moves, device):
@@ -214,20 +240,18 @@ def sample_aggressive(policy_output, passive_move, valid_moves, device):
     aggressive_logits = get_aggressive_logits(policy_output).squeeze()
     masked_logits, mask = mask_aggressive_logits(aggressive_logits, passive_move, valid_moves, device)
 
-    # get masked probs
-    masked_probs = torch.softmax(masked_logits, dim=-1)
-    masked_log_probs = torch.log_softmax(masked_logits, dim=-1)
-
     # Sample aggressive move
-    aggressive_index = torch.multinomial(masked_probs, 1).item()
+    dist = Categorical(logits=masked_logits)
+    aggressive_index = dist.sample()    
+    masked_log_probs = dist.log_prob(aggressive_index) 
 
     # Decode aggressive move
     a_start_x = aggressive_index // 8
     a_start_y = aggressive_index % 8
 
     # check validity
-    assert ((passive_move),(a_start_x, a_start_y)) in valid_moves
-    return (a_start_x, a_start_y), aggressive_index, masked_log_probs, mask  
+    assert ((passive_move[0],passive_move[1],passive_move[2],passive_move[3]),(a_start_x.item(), a_start_y.item())) in valid_moves
+    return (a_start_x.item(), a_start_y.item()), aggressive_index.item(), masked_log_probs, mask  
 
 
 def model_action(policy_output, board, device):
@@ -287,11 +311,40 @@ def intermediate_reward(state, step, max_step) -> torch.Tensor:
     '''
     Intermediate reward function - we can shape this later
     
+    state: 2x8x8 board representing the four boards concatentated into an 8x8 board
+    step: move number for the state
+    max_step: max number of steps in a game
+    
     '''   
+    b1 = state[0]
+    b2 = state[1]
+    b3 = state[2]
+    b4 = state[3]
+    e1 = state[4]
+    e2 = state[5]
+    e3 = state[6]
+    e4 = state[7]
+    
     # reward for piece discrepancy
-    piece_discrep = torch.sum(state)
+    b1_discrep = torch.sum(b1) - torch.sum(e1)
+    b2_discrep = torch.sum(b2) - torch.sum(e2)
+    b3_discrep = torch.sum(b3) - torch.sum(e3)
+    b4_discrep = torch.sum(b4) - torch.sum(e4)
+    piece_discrep = torch.max(torch.tensor([b1_discrep, b2_discrep, b3_discrep, b4_discrep]))
+    
+    # safe piece positioning
+    piece_safe = 0
+    for i in range(1,3):
+        for j in range(1,3):
+            piece_safe += b1[i,j] + b2[i,j] + b3[i,j] + b4[i,j]
+            
+    # enemy piece unsafe positioning
+    enemy_unsafe = 0
+    for i in [0,3]:
+        for j in [0,3]:
+            enemy_unsafe += e1[i,j] + e2[i,j] + e3[i,j] + e4[i,j]
 
-    return (-0.01)*(step) +(piece_discrep/16)
+    return (-0.1)*(step/max_step) + (piece_discrep/16) + 0.1*(piece_safe/16) + 0.1*(enemy_unsafe/16)
 
     
 #### PLOTTING ####    

@@ -7,20 +7,18 @@ class ResidualBlock2D(nn.Module):
         super(ResidualBlock2D, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding='same')
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding='same')
-        self.n1 = nn.LayerNorm([out_channels,8,8])
-        self.n2 = nn.LayerNorm([out_channels,8,8])
 
     def forward(self, x):
         residual = x
-        out = F.relu(self.n1(self.conv1(x)))
-        out = self.n2(self.conv2(out))
+        out = F.relu(self.conv1(x))
+        out = self.conv2(out)
         out += residual
         out = F.relu(out)
         return out
     
 
 class MLP_Head(nn.Module):
-    def __init__(self, in_channels, out_channels, hidden_channels=256, dropout_rate=0.3):
+    def __init__(self, in_channels, out_channels, hidden_channels=512):
         super(MLP_Head, self).__init__()
         self.net = nn.Sequential(
             nn.Linear(in_channels, hidden_channels),
@@ -36,8 +34,7 @@ class Critic(nn.Module):
     def __init__(self, in_channels, hidden_channels=256):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(128, 1, kernel_size=1, stride=1, padding='same'),
-            nn.LayerNorm([1,8,8]),
+            nn.Conv2d(256, 1, kernel_size=1, stride=1, padding='same'),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(in_channels, hidden_channels),
@@ -51,7 +48,7 @@ class Critic(nn.Module):
     
     
 class Shobu_PPO(nn.Module):
-    def __init__(self, device, num_boards=2, board_size=8):
+    def __init__(self, device, num_boards=64, board_size=4):
         super(Shobu_PPO, self).__init__()
         
         # Input shape: (batch_size, num_boards, board_size, board_size)
@@ -60,28 +57,32 @@ class Shobu_PPO(nn.Module):
         
         self.backbone = nn.Sequential(
             # Block 1
-            nn.Conv2d(self.input_channels, 128, kernel_size=3, stride=1, padding='same'),
+            nn.Conv2d(self.input_channels, 256, kernel_size=3, stride=1, padding='same'),
             nn.ReLU(),
             
             # Residual blocks
-            ResidualBlock2D(128, 128),
-            ResidualBlock2D(128, 128),
-            ResidualBlock2D(128, 128),
-            ResidualBlock2D(128, 128),
-#             ResidualBlock2D(128, 128),
-#             ResidualBlock2D(128, 128),
-#             ResidualBlock2D(128, 128),
-#             ResidualBlock2D(128, 128),
-#             ResidualBlock2D(128, 128),
-#             ResidualBlock2D(128, 128),
-#             ResidualBlock2D(128, 128),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
+            ResidualBlock2D(256, 256),
         )
         
         # passive head
         self.passive_filter = nn.Sequential(
             # Block 1
-            nn.Conv2d(128, 4, kernel_size=1, stride=1, padding='same'),
-            nn.LayerNorm([4,8,8]),
+            nn.Conv2d(256, 2, kernel_size=1, stride=1, padding='same'),
             nn.ReLU(),
             nn.Flatten(),
         )
@@ -91,10 +92,10 @@ class Shobu_PPO(nn.Module):
         self.passive_dir_head = MLP_Head(self.fc_input_size+64, 8)
         self.passive_dist_head = MLP_Head(self.fc_input_size+72, 2)
         # aggressive head (conditioned on first move)
-        self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64, hidden_channels=128)
+        self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64)
         
         # critic head
-        self.critic = Critic(self.fc_input_size//4, hidden_channels=64) 
+        self.critic = Critic(self.fc_input_size//2, hidden_channels=16) 
         
 
     def _calculate_fc_input_size(self, num_boards, board_size):

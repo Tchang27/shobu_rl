@@ -61,7 +61,7 @@ class RLAgent(Agent):
 	"""
 	def __init__(self, checkpoint_path: str):
 		self.device = torch.device("cpu")   
-		self.model = Shobu_PPO()
+		self.model = Shobu_PPO(self.device)
 		self.model.to(self.device)
 		self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
 		self.model.eval()
