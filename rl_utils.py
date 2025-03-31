@@ -155,10 +155,28 @@ def get_aggressive_logits(policy_output: dict):
     return aggressive_logits
 
 
+def mask_logits(logits: torch.tensor, mask: torch.tensor):
+    '''
+    Mask the invalid actions
+    FLAG: This may be how we should be doing it, we can discuss
+    
+    Input:
+    - logits: logits from model
+    - mask: tensor of same shape as logits, with 0's for invalid moves and 1's for valid moves
+    
+    Output:
+    - normalized_logits: normalized masked logits
+    - mask: mask of valid actions
+    '''
+    logits[mask == 0] = float('-inf')
+    return logits, mask
+
+
 def normalized_mask_logits(logits: torch.tensor, mask: torch.tensor):
     '''
     Normalize the valid move logits and mask the invalid actions
-    
+    FLAG: This may be incorrect, we can discuss
+
     Input:
     - logits: logits from model
     - mask: tensor of same shape as logits, with 0's for invalid moves and 1's for valid moves
