@@ -78,7 +78,7 @@ class ReplayMemory(object):
     
 #### REPRESENTATION CONVERSIONS ####
 
-def get_board_representation(board, previous_boards, device):
+def get_board_representation(board: Shobu, previous_boards: list, device: torch.device):
     '''
     Get board representation: 8 x 8 x 4 x 4
     board - current Shobu board 
@@ -91,7 +91,7 @@ def get_board_representation(board, previous_boards, device):
 
 def convert_to_PPOMove(move: ShobuMove):
     '''
-    Convert ShobuMove object for RL model
+    Convert from a ShobuMove object for RL model
     Output format:
     ((passive_start_x: int, passive_start_y: int, direction: (int,int), distance: int)) , ((aggressive_start_x: int, aggressive_start_y: int))
     
@@ -108,9 +108,9 @@ def convert_to_PPOMove(move: ShobuMove):
             (aggressive_start_x, aggressive_start_y))
 
 
-def convert_to_ShobuMove(passive_move, aggressive_move):
+def convert_to_ShobuMove(passive_move: tuple, aggressive_move: tuple):
     '''
-    Convert ShobuMove object for RL model
+    Convert to a ShobuMove object for Shobu board
     Output format:
     ((passive_start_x: int, passive_start_y: int, direction: (int,int), distance: int)) , ((aggressive_start_x: int, aggressive_start_y: int))
     
@@ -128,9 +128,9 @@ def convert_to_ShobuMove(passive_move, aggressive_move):
 
 #### SAMPLING FUNCTION UTILS ####
 
-def get_passive_logits(policy_output):
+def get_passive_logits(policy_output: dict):
     '''
-    From the policy model, extract passive move logits
+    From the policy model output, extract passive move logits
     '''
     # Extract passive probabilities
     p_pos = policy_output["passive"]["position"]
@@ -144,9 +144,9 @@ def get_passive_logits(policy_output):
     return passive_logits
 
 
-def get_aggressive_logits(policy_output):
+def get_aggressive_logits(policy_output: dict):
     '''
-    From the policy model, extract aggressive move logits
+    From the policy model output, extract aggressive move logits
     '''
     # Extract aggressive probabilities
     a_pos = policy_output["aggressive"]["position"]
@@ -155,7 +155,18 @@ def get_aggressive_logits(policy_output):
     return aggressive_logits
 
 
-def normalized_mask_logits(logits, mask):
+def normalized_mask_logits(logits: torch.tensor, mask: torch.tensor):
+    '''
+    Normalize the valid move logits and mask the invalid actions
+    
+    Input:
+    - logits: logits from model
+    - mask: tensor of same shape as logits, with 0's for invalid moves and 1's for valid moves
+    
+    Output:
+    - normalized_logits: normalized masked logits
+    - mask: mask of valid actions
+    '''
     valid_logits = logits * mask
     
     # Normalize valid logits to have mean 0, std 1
@@ -171,7 +182,19 @@ def normalized_mask_logits(logits, mask):
     return normalized_logits, mask
 
 
-def mask_passive_logits(logits, valid_moves, device):
+def mask_passive_logits(logits: torch.tensor, valid_moves: list, device: torch.device):
+    '''
+    Mask passive logits using valid moves list
+    
+    Input:
+    - logits: logits for passive moves from model
+    - valid_moves: list of valid mvoes for board state
+    - device: torch device
+    
+    Output:
+    - logits: normalized masked logits
+    - mask: mask of valid actions
+    '''
     # create mask
     mask = torch.zeros(logits.shape, device=device, dtype=torch.float32)
     for move in valid_moves:
@@ -183,7 +206,19 @@ def mask_passive_logits(logits, valid_moves, device):
     return logits, mask
 
 
-def mask_aggressive_logits(logits, passive_move, valid_moves, device):
+def mask_aggressive_logits(logits: torch.tensor, passive_move: tuple, valid_moves: list, device: torch.device):
+    '''
+    Mask aggressive logits using valid moves list
+    
+    Input:
+    - logits: logits for aggressive moves from model
+    - valid_moves: list of valid mvoes for board state
+    - device: torch device
+    
+    Output:
+    - logits: normalized masked logits
+    - mask: mask of valid actions
+    '''
     # create mask
     mask = torch.zeros(logits.shape, device=device, dtype=torch.float32)
     for move in valid_moves:
@@ -195,11 +230,20 @@ def mask_aggressive_logits(logits, passive_move, valid_moves, device):
     return logits, mask
 
 
-def sample_passive(policy_output, valid_moves, device):
+def sample_passive(policy_output: dict, valid_moves: list, device: torch.device):
     '''
-    From the policy model, sample passive action
+     Input:
+    - policy_output: dictionary of policy model outputs
+    - valid_moves: list of valid mvoes for board state
+    - device: torch device
+    
+    Output:
+    - move: tuple representing the sampled passive move
+    - passive_index: index of action sampled
+    - masked_log_prob: log probability of sampled mvoe
+    - mask: mask of valid passive moves
     '''
-    # Flatten the passive move probabilities
+    # Get passive move logits
     passive_logits = get_passive_logits(policy_output).squeeze()
 
     valid_passive_moves = set()
@@ -233,11 +277,23 @@ def sample_passive(policy_output, valid_moves, device):
     return (passive_start_x.item(), passive_start_y.item(), direction.item(), dist.item()), passive_index.item(), masked_log_probs, mask
 
 
-def sample_aggressive(policy_output, passive_move, valid_moves, device):
+def sample_aggressive(policy_output: dict, passive_move: tuple, valid_moves: list, device: torch.device):
     '''
-    From the policy model, sample aggressive action
+     Input:
+    - policy_output: dictionary of policy model outputs
+    - passive move: tuple representing passive move sampled for the current turn
+    - valid_moves: list of valid mvoes for board state
+    - device: torch device
+    
+    Output:
+    - move: tuple representing the sampled aggressive move
+    - aggressive_index: index of action sampled
+    - masked_log_prob: log probability of sampled mvoe
+    - mask: mask of valid passive moves
     '''
+    # Get aggressive move logits
     aggressive_logits = get_aggressive_logits(policy_output).squeeze()
+    # Get mask
     masked_logits, mask = mask_aggressive_logits(aggressive_logits, passive_move, valid_moves, device)
 
     # Sample aggressive move
@@ -254,12 +310,26 @@ def sample_aggressive(policy_output, passive_move, valid_moves, device):
     return (a_start_x.item(), a_start_y.item()), aggressive_index.item(), masked_log_probs, mask  
 
 
-def model_action(policy_output, board, device):
+def model_action(policy_output: dict, board: Shobu, device: torch.device):
         '''
-        Hierarchical combinatorial sampling 
-        First select valid passive move
-        Then subset to legal aggressive moves and sample
+        Hierarchical sampling for a turn
+        First sample a valid passive move
+        Then subset to legal aggressive moves and sample a valid aggressive move
         Return ShobuMove, model passive action index, model aggressive action index, and model unmasked log probabilities
+        
+        Inputs:
+        - policy_output: dict of policy model outputs
+        - board: Shobu board
+        - device: torch device
+        
+        Outputs:
+        - move: sampled ShobuMove
+        - passive_index: index of sampled passive move
+        - aggressive_index: index of sampled aggressive move
+        - passive_probs: log probability of sampled passive move
+        - aggressive_pros: log probability of sampled aggressive move
+        - passive_mask: mask of valid passive moves
+        - aggressive mask: mask of valid aggressive moves
         '''
         # Generate legal moves
         valid_shobu_moves = board.move_gen()
@@ -276,9 +346,19 @@ def model_action(policy_output, board, device):
 
 #### LOSS FUNCTION UTILS ####
     
-def compute_returns(rewards, values, device, gamma=0.99, lam=0.95) -> list[list, list]:
+def compute_returns(rewards: list, values: torch.tensor, device: torch.device, gamma: float=0.99, lam: float=0.95) -> list[torch.tensor, torch.tensor]:
     """
     Compute returns and advantages using Generalized Advantage Estimation (GAE).
+    
+    Inputs:
+    - rewards: list of rewards for each state s_t in the trajectory after applying action a_t
+    - values: tensor of value model outputs representing V(s_t)
+    - device: torch device
+    - gamma: discount factor
+    - lambda: smoothing factor
+    
+    Outputs:
+    
     """
     returns = []
     advantages = []
@@ -308,7 +388,7 @@ def intermediate_reward(state, step, max_step) -> torch.Tensor:
     '''
     Intermediate reward function - we can shape this later
     
-    state: 2x8x8 board representing the four boards concatentated into an 8x8 board
+    state: 8x4x4 board representing the four boards
     step: move number for the state
     max_step: max number of steps in a game
     
@@ -354,6 +434,9 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, p_entr
     - draw_list: list of 0s and 1s representing draws (episode terminated at max moves)
     - plot_every: episode intervals when you plot
     - episode: current episode/game
+    
+    Output:
+    - updated plot in a Jupyter notebook
     '''
     clear_output(wait=True)
     fig, ax1 = plt.subplots(figsize=(12, 8))
