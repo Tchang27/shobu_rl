@@ -167,7 +167,7 @@ def normalized_mask_logits(logits, mask):
     else:
         normalized_logits = valid_logits
     
-    normalized_logits[mask == 0] = -1e10
+    normalized_logits[mask == 0] = float('-inf')
     return normalized_logits, mask
 
 
@@ -296,13 +296,10 @@ def compute_returns(rewards, values, device, gamma=0.99, lam=0.95) -> list[list,
 
         # GAE calculation
         gae = delta + gamma * lam * gae
-        # Return is the advantage + value estimate, used for vaue function loss
-        return_t = gae + values[t]
-        returns.insert(0, return_t)  # Insert at the beginning for reverse order
-        advantages.insert(0, gae)
-        
-    advantages = torch.tensor(advantages, device=device, dtype=torch.float32).squeeze()
-    returns = torch.tensor(returns, device=device, dtype=torch.float32).squeeze()
+        advantages.append(gae)
+    
+    advantages = torch.stack(advantages[::-1])
+    returns = advantages + values
 
     return returns, advantages
       
@@ -316,36 +313,8 @@ def intermediate_reward(state, step, max_step) -> torch.Tensor:
     max_step: max number of steps in a game
     
     '''   
-    b1 = state[0]
-    b2 = state[1]
-    b3 = state[2]
-    b4 = state[3]
-    e1 = state[4]
-    e2 = state[5]
-    e3 = state[6]
-    e4 = state[7]
+    return (-0.001)*(step)
     
-    # reward for piece discrepancy
-    b1_discrep = torch.sum(b1) - torch.sum(e1)
-    b2_discrep = torch.sum(b2) - torch.sum(e2)
-    b3_discrep = torch.sum(b3) - torch.sum(e3)
-    b4_discrep = torch.sum(b4) - torch.sum(e4)
-    piece_discrep = torch.max(torch.tensor([b1_discrep, b2_discrep, b3_discrep, b4_discrep]))
-    
-    # safe piece positioning
-    piece_safe = 0
-    for i in range(1,3):
-        for j in range(1,3):
-            piece_safe += b1[i,j] + b2[i,j] + b3[i,j] + b4[i,j]
-            
-    # enemy piece unsafe positioning
-    enemy_unsafe = 0
-    for i in [0,3]:
-        for j in [0,3]:
-            enemy_unsafe += e1[i,j] + e2[i,j] + e3[i,j] + e4[i,j]
-
-    return (-0.1)*(step/max_step) + (piece_discrep/16) + 0.1*(piece_safe/16) + 0.1*(enemy_unsafe/16)
-
     
 #### PLOTTING ####    
     

@@ -321,7 +321,7 @@ class Shobu_RL():
                         policy_loss = -torch.min(ratio * advantages, clipped_ratio * advantages).mean()
 
                         # value function loss
-                        values = self.ppo_model.value_function(state_batch).squeeze()
+                        values = self.ppo_model.value_function(state_batch)
                         value_loss = F.mse_loss(values, returns)
 
                         # entropy loss
