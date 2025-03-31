@@ -1,4 +1,11 @@
 # shobu_rl
+
+## Resources
+- https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
+- https://huggingface.co/blog/deep-rl-ppo
+- https://medium.com/@danushidk507/ppo-algorithm-3b33195de14a
+- https://arxiv.org/pdf/1707.06347 
+
 ## Training runs:
 - Run 1:
     - Goal: Trial run
