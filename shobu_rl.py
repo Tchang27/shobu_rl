@@ -56,6 +56,9 @@ class Shobu_RL():
 
         
     def init_game(self):
+        '''
+        Initializes new board, randomly selects side for the model, and initializes board representations
+        '''
         # steps in a game
         self.steps_done = 0
         # Shobu board
@@ -74,8 +77,7 @@ class Shobu_RL():
         Set models for training
 
         Input:
-        - Value model
-        - Target model
+        - PPO model (policy and value)
 
         Return: None
         '''
@@ -105,9 +107,22 @@ class Shobu_RL():
             del self.opponent_pool[mid_index]
 
 
-    def select_action(self, state, device):
+    def select_action(self, state: torch.tensor, device: torch.device):
         '''
         Select policy from model for a given board state
+        
+        Input:
+        - state: torch tensor of the board representation
+        - device: torch device
+        
+        Outputs:
+        - move: sampled ShobuMove
+        - passive_index: index of sampled passive move
+        - aggressive_index: index of sampled aggressive move
+        - passive_probs: log probability of sampled passive move
+        - aggressive_pros: log probability of sampled aggressive move
+        - passive_mask: mask of valid passive moves
+        - aggressive mask: mask of valid aggressive moves
         ''' 
         with torch.no_grad():
             policy_output = self.ppo_model.get_policy(state)
@@ -115,7 +130,17 @@ class Shobu_RL():
         return move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask
         
         
-    def select_opponent_action(self, board, device):
+    def select_opponent_action(self, board: Shobu, device: torch.device):
+        '''
+        Select policy from opponent for a given board state
+        
+        Input:
+        - board: Shobu board
+        - device: torch device
+        
+        Outputs:
+        - move: sampled ShobuMove
+        ''' 
         if type(self.opp) is RandomAgent:
             move = self.opp.move(board)
         else:
@@ -126,9 +151,15 @@ class Shobu_RL():
         return move
     
     
-    def model_play_game(self, memory, train=True):
+    def model_play_game(self, memory: ReplayMemory, train=True):
         '''
         Play a single training game of shobu
+        
+        Input:
+        - memory: ReplayMemory object to store game states
+        
+        Output:
+        - memory: ReplayMemory object holding game states from simulation
         '''
         # select opponents
         if train:
@@ -195,6 +226,13 @@ class Shobu_RL():
     def train(self, opt, scheduler, sparse=True):
         '''
         Train a PPO model for Shobu
+        
+        Input:
+        - opt: torch optimizer 
+        - scheduler: torch learning rate scheduler
+        
+        Output:
+        - none 
         '''
         loss_list = []
         ppo_loss_list = []
