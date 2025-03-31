@@ -167,8 +167,19 @@ def normalized_mask_logits(logits: torch.tensor, mask: torch.tensor):
     - normalized_logits: normalized masked logits
     - mask: mask of valid actions
     '''
-    logits[mask == 0] = float('-inf')
-    return logits , mask
+    valid_logits = logits * mask
+    
+    # Normalize valid logits to have mean 0, std 1
+    if mask.sum() > 1:  # Ensure at least two valid actions
+        valid_mean = (valid_logits.sum(dim=-1, keepdim=True) / mask.sum(dim=-1, keepdim=True))
+        # Compute standard deviation for valid logits
+        valid_std = torch.sqrt(((valid_logits - valid_mean) ** 2 * mask).sum(dim=-1, keepdim=True) / mask.sum(dim=-1, keepdim=True) + 1e-8)
+        normalized_logits = (valid_logits - valid_mean) / (valid_std + 1e-8)
+    else:
+        normalized_logits = valid_logits
+    
+    normalized_logits[mask == 0] = float('-inf')
+    return normalized_logits, mask
 
 
 def mask_passive_logits(logits: torch.tensor, valid_moves: list, device: torch.device):

@@ -11,7 +11,7 @@ if __name__ == '__main__':
 		RLAgent("model_weights/ppo_checkpoint_77000.pth"), 
 	],
 	num_rounds=20,
-	max_moves_per_game=80
+	max_moves_per_game=100
 	)
 
 	print(elos)
