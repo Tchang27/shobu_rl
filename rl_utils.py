@@ -76,6 +76,40 @@ class ReplayMemory(object):
         return len(self.memory)
     
     
+#### BOARD GENERATION ####
+def generate_subboard():
+    s = "................"
+    length = len(s)
+
+    num_bs = random.randint(1, 4)
+    num_ws = random.randint(1, 4)
+
+    positions = random.sample(range(length), num_bs + num_ws)
+    bs_positions = positions[:num_bs]
+    ws_positions = positions[num_bs:]
+
+    s_list = list(s)
+    for pos in bs_positions:
+        s_list[pos] = 'b'
+    for pos in ws_positions:
+        s_list[pos] = 'w'
+
+    return ''.join(s_list)
+    
+
+def generate_board() -> Shobu:
+    # select next mover
+    next_mover = random.choice([Player.BLACK, Player.WHITE])
+    # generate board
+    top_right = generate_subboard()
+    top_left = generate_subboard()
+    bot_right = generate_subboard()
+    bot_left = generate_subboard()
+    s = top_right[:4] + top_left[:4] + top_right[4:8] + top_left[4:8] + top_right[8:12] + top_left[8:12] + top_right[12:] + top_left[12:] + bot_right[:4] + bot_left[:4] + bot_right[4:8] + bot_left[4:8] + bot_right[8:12] + bot_left[8:12] + bot_right[12:] + bot_left[12:]
+    
+    return Shobu.from_str(s, next_mover)
+    
+    
 #### REPRESENTATION CONVERSIONS ####
 
 def get_board_representation(board: Shobu, previous_boards: list, device: torch.device):
