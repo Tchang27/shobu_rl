@@ -6,6 +6,18 @@
 - https://medium.com/@danushidk507/ppo-algorithm-3b33195de14a
 - https://arxiv.org/pdf/1707.06347 
 
+## Some interesting stats
+(computed by brandon)
+- Branch factor: approx. 62.2
+- Total number of legal positions: <= 2.62 * 10^25 (26190232295586403046560000)
+- Number of legal moves in starting position: 232
+
+compare with:
+- chess: branch factor of 35, legal positions ~10^44, 20 first moves
+- checkers: branch factor of 6.4, legal positions 5 * 10^20, 7 first moves
+- go: branch factor 250, legal positions 2.1 * 10^170, 361 first moves
+- ludo: just totally guessing, branch factor probably like 2ish, 1 first move
+
 ## Training runs:
 - Run 1:
     - Goal: Trial run
