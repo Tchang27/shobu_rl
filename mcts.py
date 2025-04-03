@@ -94,7 +94,7 @@ class MCTree:
         self.model = model
         self.device = device
 
-    def _value_and_policy(self, path: list[MCNode]) -> tuple[float, dict[ShobuMove, torch.tensor]]:
+    def _value_and_policy(self, path: list[MCNode], noise=True) -> tuple[float, dict[ShobuMove, torch.tensor]]:
         recent_history = path[-HISTORY_SIZE:] # not necessarily 8 elts long!!
         past_boards = []
         for node in recent_history:
@@ -112,10 +112,10 @@ class MCTree:
         with torch.no_grad():
             output = self.model(state_tensor)
             evaluation = output['q_value']
-            move_to_probability = get_joint_logits(path[-1].state, output, noise=True)
+            move_to_probability = get_joint_logits(path[-1].state, output, noise=noise)
         return evaluation, move_to_probability
 
-    def simulation(self):
+    def simulation(self, noise=True):
         cur_node = self.root
         path_to_leaf = [cur_node]
         while cur_node.is_expanded:
@@ -138,17 +138,17 @@ class MCTree:
             evaluation = 0
         else:
             # get past 8 board states.
-            evaluation, move_to_probability = self._value_and_policy(path_to_leaf)
+            evaluation, move_to_probability = self._value_and_policy(path_to_leaf, noise)
             cur_node.expansion(move_to_probability)
 
         self.backprop(evaluation, path_to_leaf, cur_node.player) # use `evaluation` in backprop
 
-    def search(self, num_simulations: int) -> MCNode:
-        _, move_to_probability = self._value_and_policy([self.root])
+    def search(self, num_simulations: int, noise=True) -> MCNode:
+        _, move_to_probability = self._value_and_policy([self.root], noise)
         # TODO: add dirichlet noise to move_to_probability
         self.root.expansion(move_to_probability)
         for _ in range(num_simulations):
-            self.simulation()
+            self.simulation(noise)
         return self.root
 
     def backprop(self, evaluation: float, path_to_leaf: list[MCNode], cur_player: Player):
@@ -164,7 +164,7 @@ class MCTree:
                 
 GAMES_PER_EPOCH = 1 # TODO tune this
 MAX_GAMES = 50000
-EPOCHS = 3 # number of epochs to train per game
+EPOCHS = 1 # number of epochs to train per game
 MINIBATCH_SIZE = 64
 class Shobu_MCTS_RL:
     # init
@@ -174,7 +174,7 @@ class Shobu_MCTS_RL:
         self.model = model
         # parameters
         self.epochs = 50000
-        self.minibatch_size = 512
+        self.minibatch_size = MINIBATCH_SIZE
         self.device = device
 
     def temperature_scheduler(self, epoch_no, move_no):
@@ -206,8 +206,14 @@ class Shobu_MCTS_RL:
             # TODO: consider playout cap randomization on some moves instead
             # of doing full tree search every time
             mcts = MCTree(self.model, board, self.device)
+            # playout randomization
             t0 = time.time()
-            rollout = mcts.search(800)
+            full_search = False
+            if np.random.random() < 0.75:
+                rollout = mcts.search(100, noise=False)
+            else:
+                rollout = mcts.search(800, noise=True)
+                full_search = True
             t1 = time.time()
             print(t1-t0)
             _sum_pi = sum([child.num_visits for child in rollout.children.values()])
@@ -216,7 +222,9 @@ class Shobu_MCTS_RL:
             pi = {}
             for k in rollout.children.keys():
                 pi[k] = rollout.children[k].num_visits / _sum_pi
-            generated_training_data.append((board, pi))
+            # Only append full search
+            if full_search:
+                generated_training_data.append((board, pi))
 
             # choose the next move based on tree search results
             tau = self.temperature_scheduler(epoch, num_moves)
@@ -305,15 +313,12 @@ class Shobu_MCTS_RL:
 
                     # get distributions
                     policy_losses = []
-                    # compute loss per each state, since the distribution shapes are different
                     for state, board, pi_dict in zip(states, boards, mcts_dist):
-                        policy_outputs = self.model.get_policy(state.unsqueeze(0))
+                        policy_outputs = self.model.get_policy(state.unsqueeze(0))  # Get policy logits
                         move_to_logit = get_joint_logits(board, policy_outputs, logits=True)
-                        policy = [move_to_logit[k] for k in move_to_logit.keys()]
-                        pi = [pi_dict[k] for k in pi_dict.keys()]
-                        policy_dist = torch.stack(policy)
-                        pi_dist = torch.tensor(np.stack(pi), device=self.device, dtype=torch.float32)
-                        policy_losses.append(-torch.sum(pi_dist * F.log_softmax(policy_dist, dim=-1)))
+                        policy = torch.tensor([move_to_logit[k] for k in move_to_logit.keys()], device=self.device, dtype=torch.float32)
+                        pi_dist = torch.tensor([pi_dict[k] for k in pi_dict.keys()], device=self.device, dtype=torch.float32)
+                        policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
                     policy_loss = torch.mean(torch.stack(policy_losses))
 
                     ### optimize ###
