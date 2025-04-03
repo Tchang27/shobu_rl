@@ -44,19 +44,41 @@ class MCNode:
         Computes argmax_a (Q(s,a) + u(s,a)). See wikipedia link for "selection"
         and "expansion" terminology definitions
         """
-        max_a = -np.inf
-        a_move, a_t = None, None
-        for move, child in self.children.items():
-            # Inlining ucb calculation to avoid function call overhead
-            # exploitation bonus
-            q = child.num_visits and -child.total_reward / child.num_visits
-            # exploration bonus
-            u = child.prior * np.sqrt(self.num_visits) / (1 + child.num_visits)
-            ucb = q + u
-            if (score := ucb) > max_a:
-                max_a = score
-                a_move, a_t = move, child
-        return a_move, a_t
+#         max_a = -np.inf
+#         a_move, a_t = None, None
+#         for move, child in self.children.items():
+#             # Inlining ucb calculation to avoid function call overhead
+#             # exploitation bonus
+#             q = child.num_visits and -child.total_reward / child.num_visits
+#             # exploration bonus
+#             u = child.prior * np.sqrt(self.num_visits) / (1 + child.num_visits)
+#             ucb = q + u
+#             if (score := ucb) > max_a:
+#                 max_a = score
+#                 a_move, a_t = move, child
+#         return a_move, a_t
+        moves = list(self.children.keys())
+        children = list(self.children.values())
+
+        # vist and reward vector
+        visits = np.array([c.num_visits for c in children], dtype=np.float32)
+        rewards = np.array([-c.total_reward for c in children], dtype=np.float32)
+
+        # check this brandon
+        np.maximum(visits, 1, out=visits)  # Ensure visits >= 1
+        q_values = rewards / visits
+
+        # exploration bonus
+        priors = np.array([c.prior for c in children], dtype=np.float32)
+        sqrt_parent_visits = np.sqrt(self.num_visits)
+        exploration = priors * sqrt_parent_visits / (1 + visits)
+
+        # UCB scores
+        ucb_scores = q_values + exploration
+
+        # Find max
+        max_idx = np.argmax(ucb_scores)
+        return moves[max_idx], children[max_idx]
 
     def expansion(self, candidate_moves: dict[ShobuMove, torch.tensor]):
         for move, probability in candidate_moves.items():
@@ -157,9 +179,9 @@ class MCTree:
             # increment value by the found reward  # increment visits by 1
             node.num_visits += 1
             if node.player == cur_player:
-                node.total_reward += evaluation
+                node.total_reward += evaluation.item()
             else:
-                node.total_reward -= evaluation
+                node.total_reward -= evaluation.item()
 
                 
 GAMES_PER_EPOCH = 1 # TODO tune this
@@ -212,7 +234,7 @@ class Shobu_MCTS_RL:
             if np.random.random() < 0.75:
                 rollout = mcts.search(100, noise=False)
             else:
-                rollout = mcts.search(800, noise=True)
+                rollout = mcts.search(400, noise=True)
                 full_search = True
             t1 = time.time()
             print(t1-t0)
