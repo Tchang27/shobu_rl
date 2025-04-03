@@ -133,7 +133,7 @@ class MCTree:
         ## value evaluates leaves
         with torch.no_grad():
             output = self.model(state_tensor)
-            evaluation = output['q_value']
+            evaluation = output['q_value'].item()
             move_to_probability = get_joint_logits(path[-1].state, output, noise=noise)
         return evaluation, move_to_probability
 
@@ -179,9 +179,9 @@ class MCTree:
             # increment value by the found reward  # increment visits by 1
             node.num_visits += 1
             if node.player == cur_player:
-                node.total_reward += evaluation.item()
+                node.total_reward += evaluation
             else:
-                node.total_reward -= evaluation.item()
+                node.total_reward -= evaluation
 
                 
 GAMES_PER_EPOCH = 1 # TODO tune this
