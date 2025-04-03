@@ -281,7 +281,7 @@ def mask_passive_logits(logits: torch.tensor, valid_moves: list, device: torch.d
         pfrom = (px*8) + py 
         pidx = (pfrom * (8 * 2)) + (pd * 2) + (ps-1)
         mask[pidx] = 1
-    logits, mask = mask_logits(logits, mask)
+    logits, mask = normalized_mask_logits(logits, mask)
     return logits, mask
 
 
@@ -305,7 +305,7 @@ def mask_aggressive_logits(logits: torch.tensor, passive_move: tuple, valid_move
             (ax, ay)= move[1]
             adix = (ax*8) + ay 
             mask[adix] = 1
-    logits, mask = mask_logits(logits, mask)
+    logits, mask = normalized_mask_logits(logits, mask)
     return logits, mask
 
 
@@ -424,7 +424,7 @@ def model_action(policy_output: dict, board: Shobu, device: torch.device):
 
 
 #### MCTS Select Moves ####
-def get_joint_logits(board: Shobu, policy_output: dict) -> dict:
+def get_joint_logits(board: Shobu, policy_output: dict, logits=False) -> dict:
     '''
     Return dict mapping valid Shobu moves to probabilities from the policy net
 
@@ -433,10 +433,10 @@ def get_joint_logits(board: Shobu, policy_output: dict) -> dict:
     - policy_output: output from Shobu_MCTS
 
     Outputs:
-    - softmax_dict: mapping of Shobu moves to probabilities
+    - softmax_dict: mapping of Shobu moves to tensor ofprobabilities
     '''
-    plogits = get_passive_logits(policy_output)
-    alogits = get_aggressive_logits(policy_output)
+    plogits = get_passive_logits(policy_output).squeeze()
+    alogits = get_aggressive_logits(policy_output).squeeze()
     valid_shobu_moves = board.move_gen()
     valid_moves = [convert_to_PPOMove(move) for move in valid_shobu_moves]
     # dict
@@ -449,10 +449,13 @@ def get_joint_logits(board: Shobu, policy_output: dict) -> dict:
         aidx = (ax*8) + ay 
         logit = plogits[pidx]+alogits[aidx]
         move_to_logit[valid_shobu_moves[i]] = logit
+
+    if logits:
+        return move_to_logit
     
-    concatenated_tensor = torch.stack(list(move_to_logit.values()))
+    concatenated_tensor = torch.stack([move_to_logit[k] for k in move_to_logit.keys()])
     softmax_tensor = F.softmax(concatenated_tensor, dim=0)
-    softmax_dict = {key: softmax_tensor[i] for i, key in enumerate(move_to_logit)}
+    softmax_dict = {key: softmax_tensor[i] for i, key in enumerate(move_to_logit.keys())}
     return softmax_dict
 
 

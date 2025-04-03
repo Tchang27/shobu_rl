@@ -245,7 +245,7 @@ class Shobu_MCTS(nn.Module):
         self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64, hidden_channels=64)
         
         # critic head
-        self.critic = Critic_MCTS(self.fc_input_size//2, hidden_channels=16) 
+        self.critic = Critic_MCTS(self.fc_input_size//2, hidden_channels=16)
         
 
     def _calculate_fc_input_size(self, num_boards, board_size):
@@ -291,7 +291,7 @@ class Shobu_MCTS(nn.Module):
         }
     
     
-    def value_function(self, x): 
+    def get_value(self, x): 
         '''
         Get q value
         '''
