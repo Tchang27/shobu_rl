@@ -48,7 +48,7 @@ def seed(seed=1000):
 
 #### REPLAY BUFFER FOR MCTS ####   
 Transition_MCTS = namedtuple('Transition',
-                        ('board', 'state', 'reward', 'ucb'))
+                        ('board', 'state', 'reward', 'mcts_dist'))
 
 class ReplayMemory_MCTS(object):
     '''
@@ -66,7 +66,7 @@ class ReplayMemory_MCTS(object):
         #return random.sample(self.memory, batch_size)
         batch = [self.memory.popleft() for _ in range(min(batch_size, len(self.memory)))]  
         return batch
-    
+
     def shuffle(self):
         self.memory = deque(random.sample(self.memory, len(self.memory)))
 

@@ -1,8 +1,3 @@
-# https://github.com/JoshVarty/AlphaZeroSimple/blob/master/monte_carlo_tree_search.py
-# https://joshvarty.github.io/AlphaZero/
-# https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
-# https://jonathan-hui.medium.com/monte-carlo-tree-search-mcts-in-alphago-zero-8a403588276a
-import random
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -12,7 +7,7 @@ from models import Shobu_MCTS, HISTORY_SIZE
 
 from shobu import ShobuMove, Shobu, Player
 
-MAX_GAME_LEN = 128
+MAX_GAME_LEN = 256
 
 class MCNode:
     def __init__(self, prior: float, player: Player):
@@ -39,7 +34,7 @@ class MCNode:
         u = child.prior * np.sqrt(self.num_visits) / (1 + child.num_visits)
         return q + u
 
-    def selection(self):
+    def selection(self) -> tuple[ShobuMove, "MCNode"]:
         """
         Computes argmax_a (Q(s,a) + u(s,a)). See wikipedia link for "selection"
         and "expansion" terminology definitions
@@ -57,14 +52,57 @@ class MCNode:
             self.children[move] = MCNode(probability, Player(not self.player))
         self.is_expanded = True
 
+    def sample_move(self, tau: float) -> ShobuMove:
+        # Useful arrays:
+        potential_moves = list(self.children.keys())
+        children_visit_counts = np.array([child.num_visits for child in self.children.values()])
+
+        # If tau is 0, pick the most visited move
+        if tau == 0:
+            chosen_move = potential_moves[np.argmax(children_visit_counts)]
+        
+        # If tau is infinity, just choose randomly
+        elif tau == float('inf'):
+            chosen_move = np.random.choice(potential_moves)
+
+        # Otherwise, sample with temperature-scaled probabilities
+        else:
+            visit_counts_scaled = children_visit_counts ** (1 / tau)
+            visit_counts_probs = visit_counts_scaled / sum(visit_counts_scaled)
+            chosen_move = np.random.choice(potential_moves, p=visit_counts_probs)
+
+        return chosen_move
+
+
 class MCTree:
     # init
     ## model (policy + value)
     def __init__(self, model: Shobu_MCTS, starting_state: Shobu, device: torch.device):
-        self.root = MCNode(0)
+        self.root = MCNode(0, starting_state.next_mover)
         self.root.state = starting_state
         self.model = model
         self.device = device
+
+    def _value_and_policy(self, path: list[MCNode]) -> tuple[float, dict[ShobuMove, float]]:
+        recent_history = path[-HISTORY_SIZE:] # not necessarily 8 elts long!!
+        past_boards = []
+        for node in recent_history:
+            # if node.state.next_mover == Player.WHITE:
+            #     flipped = node.state.copy()
+            #     flipped.flip()
+            #     past_boards.append(flipped.as_matrix())
+            # else:
+            #     past_boards.append(node.state.as_matrix())
+            assert node.state.next_mover == Player.BLACK
+            past_boards.append(node.state.as_matrix())
+        past_boards = [np.zeros((8,4,4)) for _ in range(HISTORY_SIZE-len(past_boards))] + past_boards
+        state_tensor = torch.from_numpy(np.concatenate(past_boards)).to(self.device)
+        ## value evaluates leaves
+        with torch.no_grad():
+            evaluation = self.model.get_value(state_tensor)
+            policy_output = self.model.get_policy(state_tensor)
+            move_to_probability = get_joint_logits(path[-1].state, policy_output)
+        return evaluation, move_to_probability
 
     def simulation(self):
         cur_node = self.root
@@ -89,51 +127,90 @@ class MCTree:
             evaluation = 0
         else:
             # get past 8 board states.
-            recent_history = path_to_leaf[-HISTORY_SIZE:] # not necessarily 8 elts long!!
-            past_boards = []
-            for node in recent_history:
-                if node.state.next_mover == Player.WHITE:
-                    past_boards.append(node.state.copy().flip().as_matrix())
-                else:
-                    past_boards.append(node.state.as_matrix())
-            past_boards = [np.zeros((8,4,4)) for _ in range(HISTORY_SIZE-len(past_boards))] + past_boards
-            state_tensor = torch.from_numpy(np.concatenate(past_boards)).to(self.device)
-            ## value evaluates leaves
-            with torch.no_grad():
-                evaluation = self.model.get_value(state_tensor)
-                policy_output = self.model.get_policy(state_tensor)
-                move_to_probability = get_joint_logits(cur_state, policy_output)
+            evaluation, move_to_probability = self._value_and_policy(path_to_leaf)
             cur_node.expansion(move_to_probability)
 
-        self.backprop(...)
+        self.backprop(evaluation, path_to_leaf, cur_node.player) # use `evaluation` in backprop
 
-    def search(num_simulations: int) -> MCNode:
-        pass
+    def search(self, num_simulations: int) -> MCNode:
+        _, move_to_probability = self._value_and_policy([self.root])
+        self.root.expansion(move_to_probability)
+        for _ in range(num_simulations):
+            self.simulation()
 
-    def backprop():
-        ...
+    def backprop(evaluation: float, path_to_leaf: list[MCNode], cur_player: Player):
+        # For each node on the path back up to the root:
+        for node in reversed(path_to_leaf):        
+            # increment value by the found reward  # increment visits by 1
+            node.num_visits += 1
+            if node.player == cur_player:
+                node.total_reward += evaluation
+            else:
+                node.total_reward -= evaluation
 
-
+GAMES_PER_EPOCH = 1 # TODO tune this
 class Shobu_MCTS:
     # init
     def __init__(self, model: Shobu_MCTS, device: torch.device):
         super().__init__()
         # init models
         self.model = model
-        # init game
-        self.init_game()
         # parameters
         self.epochs = 200000
         self.minibatch_size = 512
         self.device = device
 
+    def temperature_scheduler(self, epoch_no, move_no):
+        """
+        this is just a straight up guess, can try something diff too
+        but generally temperature should decrease over time
+        """
+        if move_no < 30:
+            return 1
+        elif move_no > 60:
+            return 0
+        else:
+            return (60 - move_no) / 30
 
-    def init_game(self):
-        '''
-        Initializes MCTS
-        '''
+    def play_game(self, memory: ReplayMemory_MCTS, epoch: int):
         board = Shobu.starting_position()
-        self.MCTS = MCTree(self.model, board, self.device)    
+        generated_training_data = []
+        num_moves = 0
+        game_end_reward = None
+        while True:
+            mcts = MCTree(self.model, board, self.device)
+            rollout = mcts.search(800)
+            _sum_pi = sum([child.num_visits for child in rollout.children.values()])
+
+            # This is what policy should learn
+            pi = {}
+            for k in rollout.children.keys():
+                pi[k] = rollout.children[k].num_visits / _sum_pi
+            generated_training_data.append((board, pi))
+
+            # choose the next move based on tree search results
+            tau = self.temperature_scheduler(epoch, num_moves)
+            selected_move = rollout.sample_move(tau)
+            board = board.apply(selected_move)
+
+            # Check winner
+            if (winner := board.check_winner()) is not None:
+                assert winner == Player.BLACK
+                game_end_reward = 1
+                break
+            elif num_moves >= MAX_GAME_LEN:
+                game_end_reward = 0
+                break
+
+            # next player also plays black
+            board.flip()
+            num_moves += 1
+
+        # Push entire game history into ReplayMemory
+        for board, pi in reversed(generated_training_data):
+            # uhhhhh roughly this lol idk need to add asserts
+            memory.push(board, board.as_matrix(), game_end_reward, pi)
+            game_end_reward *= -1
 
     # train
     def train(self, opt, scheduler):
@@ -144,20 +221,26 @@ class Shobu_MCTS:
         reward_list = []
 
         for epoch in self.epochs:
-            # get memory
-            rollout = self.MCTS.search()
-            rollout.shuffle()
+            # Generate training data via self-play
+            memory = ReplayMemory_MCTS()
+            for _ in range(GAMES_PER_EPOCH):
+                self.play_game(memory, epoch)
+
+            # CONSIDER:
+            # memory.augment()
+
+            memory.shuffle()
             batch_policy_loss_list = []
             batch_value_loss_list = []
             batch_loss = []
             batch_reward = []
-            while rollout:
-                transitions = rollout.sample(self.minibatch_size)
+            while memory:
+                transitions = memory.sample(self.minibatch_size)
                 batch = Transition_MCTS(*zip(*transitions))
                 boards = torch.stack(batch.board)
                 states = torch.stack(batch.state)
                 rewards = torch.stack(batch.reward)
-                ucb = torch.stack(batch.ucb)
+                mcts_dist = torch.stack(batch.mcts_dist)
 
                 ### value loss ###
                 values = self.model.value_function(states)
@@ -172,7 +255,7 @@ class Shobu_MCTS:
                     distribution = torch.stack(list(move_to_probability.values()))
                     policy_distributions.append(distribution)
                 policy_distributions = torch.stack(policy_distributions)
-                policy_loss = torch.sum(-ucb * torch.log(policy_distributions), dim=1).mean()
+                policy_loss = torch.sum(-mcts_dist * torch.log(policy_distributions), dim=1).mean()
 
                 ### optimize ###
                 loss = value_loss + policy_loss
