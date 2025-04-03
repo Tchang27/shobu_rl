@@ -131,6 +131,7 @@ class MCTree:
         past_boards = [np.zeros((8,4,4)) for _ in range(HISTORY_SIZE-len(past_boards))] + past_boards
         state_tensor = torch.tensor(np.concatenate(past_boards), device=self.device, dtype=torch.float32).unsqueeze(0)
         ## value evaluates leaves
+        
         with torch.no_grad():
             output = self.model(state_tensor)
             evaluation = output['q_value'].item()
@@ -184,10 +185,10 @@ class MCTree:
                 node.total_reward -= evaluation
 
                 
-GAMES_PER_EPOCH = 1 # TODO tune this
+GAMES_PER_EPOCH = 10 # TODO tune this
 MAX_GAMES = 50000
-EPOCHS = 1 # number of epochs to train per game
-MINIBATCH_SIZE = 64
+EPOCHS = 3 # number of epochs to train per game
+MINIBATCH_SIZE = 128
 class Shobu_MCTS_RL:
     # init
     def __init__(self, model: Shobu_MCTS, device: torch.device):
@@ -229,15 +230,12 @@ class Shobu_MCTS_RL:
             # of doing full tree search every time
             mcts = MCTree(self.model, board, self.device)
             # playout randomization
-            t0 = time.time()
             full_search = False
             if np.random.random() < 0.75:
                 rollout = mcts.search(100, noise=False)
             else:
                 rollout = mcts.search(400, noise=True)
                 full_search = True
-            t1 = time.time()
-            print(t1-t0)
             _sum_pi = sum([child.num_visits for child in rollout.children.values()])
 
             # This is what policy should learn
@@ -306,11 +304,15 @@ class Shobu_MCTS_RL:
             memory = ReplayMemory_MCTS()
             print("Simulating games...")
             for _ in range(GAMES_PER_EPOCH):
+                t0 = time.time()
                 self.play_game(memory, episode)
+                t1 = time.time()
+                print(f"Time to simulate: {t1-t0}")
 
             # TODO: consider
             # memory.augment()
             
+            t0 = time.time()
             for epoch in range(EPOCHS):
                 memory_copy = copy.deepcopy(memory)
                 memory_copy.shuffle()
@@ -348,7 +350,7 @@ class Shobu_MCTS_RL:
                     opt.zero_grad()
                     loss.backward()
                     # can adjust this or remove entirely
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
+                    #torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
                     opt.step()
                     scheduler.step()
 
@@ -367,9 +369,12 @@ class Shobu_MCTS_RL:
                 value_loss_list.append(avg_epoch_value_loss)
                 loss_list.append(avg_epoch_loss)
                 reward_list.append(avg_epoch_reward)
+                
 
             ### update plot ###
+            t1 = time.time()
             plot_progress_MCTS(reward_list, loss_list, policy_loss_list, value_loss_list, episode)
+            print(f"Training time: {t1-t0}")
 
         
 if __name__ == "__main__":

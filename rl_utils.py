@@ -439,27 +439,28 @@ def get_joint_logits(board: Shobu, policy_output: dict, logits=False, noise=Fals
     alogits = get_aggressive_logits(policy_output).squeeze()
     valid_shobu_moves = board.move_gen()
     valid_moves = [convert_to_PPOMove(move) for move in valid_shobu_moves]
-    # dict
-    move_to_logit = {}
-    for i,move in enumerate(valid_moves):
-        px, py, pd, ps = move[0]
-        pfrom = (px*8) + py 
-        pidx = (pfrom * (8 * 2)) + (pd * 2) + (ps-1)
-        (ax, ay)= move[1]
-        aidx = (ax*8) + ay 
-        logit = plogits[pidx]+alogits[aidx]
-        move_to_logit[valid_shobu_moves[i]] = logit
+    pidx = [(px * 8 + py) * 16 + pd * 2 + (ps - 1) for (px, py, pd, ps), _ in valid_moves]
+    aidx = [(ax * 8 + ay) for _, (ax, ay) in valid_moves]
+
+    # Compute logits efficiently using tensor indexing
+    plogit_values = plogits[pidx]
+    alogit_values = alogits[aidx]
+    move_logits = plogit_values + alogit_values  # Element-wise addition
+
+    move_to_logit = dict(zip(valid_shobu_moves, move_logits))
 
     if logits:
         return move_to_logit
-    concatenated_tensor = torch.stack([move_to_logit[k] for k in move_to_logit.keys()])
-    softmax_tensor = F.softmax(concatenated_tensor, dim=0)
+
+    # Apply softmax over the logits
+    softmax_tensor = F.softmax(move_logits, dim=0)
+
     if noise:
         alpha = 0.5
         eta = torch.distributions.Dirichlet(torch.full_like(softmax_tensor, alpha)).sample()
         softmax_tensor = 0.75 * softmax_tensor + 0.25 * eta
-    softmax_dict = {key: softmax_tensor[i] for i, key in enumerate(move_to_logit.keys())}
-    return softmax_dict
+
+    return dict(zip(valid_shobu_moves, softmax_tensor))
 
 
 #### LOSS FUNCTION UTILS ####
