@@ -64,9 +64,7 @@ class MCNode:
         visits = np.array([c.num_visits for c in children], dtype=np.float32)
         rewards = np.array([-c.total_reward for c in children], dtype=np.float32)
 
-        # check this brandon
-        np.maximum(visits, 1, out=visits)  # Ensure visits >= 1
-        q_values = rewards / visits
+        q_values = np.divide(rewards, visits, out=np.zeros_like(rewards), where=visits!=0)
 
         # exploration bonus
         priors = np.array([c.prior for c in children], dtype=np.float32)
