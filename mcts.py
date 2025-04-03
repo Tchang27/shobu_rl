@@ -1,4 +1,6 @@
+import cProfile
 from collections import deque
+from datetime import datetime
 import numpy as np
 import torch
 import time
@@ -44,7 +46,13 @@ class MCNode:
         max_a = -np.inf
         a_move, a_t = None, None
         for move, child in self.children.items():
-            if (score := self.ucb(child)) > max_a:
+            # Inlining ucb calculation to avoid function call overhead
+            # exploitation bonus
+            q = child.num_visits and -child.total_reward / child.num_visits
+            # exploration bonus
+            u = child.prior * np.sqrt(self.num_visits) / (1 + child.num_visits)
+            ucb = q + u
+            if (score := ucb) > max_a:
                 max_a = score
                 a_move, a_t = move, child
         return a_move, a_t
@@ -183,6 +191,14 @@ class Shobu_MCTS_RL:
         num_moves = 0
         game_end_reward = None
         while True:
+
+            ######
+            # PERFORMANCE PROFILING
+            ###
+            # pr = cProfile.Profile()
+            # pr.enable()
+
+
             # TODO: consider playout cap randomization on some moves instead
             # of doing full tree search every time
             mcts = MCTree(self.model, board, self.device)
@@ -215,6 +231,12 @@ class Shobu_MCTS_RL:
             # next player also plays black
             board.flip()
             num_moves += 1
+
+            ###
+            # END PROFILING
+            ######
+            # pr.disable()
+            # pr.dump_stats(datetime.today().strftime('%Y-%m-%d-%H:%M:%S') + f"-epoch:{epoch}-move:{num_moves}.dmp")
 
 		# last element of generated_training_data, generated_training_data[-1],
         # is the game state right before the winning move. so that "player"
@@ -330,5 +352,3 @@ if __name__ == "__main__":
 
     shobu_mcts = Shobu_MCTS_RL(model, device)
     shobu_mcts.train(optimizer, scheduler)
-
-
