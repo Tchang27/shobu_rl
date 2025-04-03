@@ -509,6 +509,9 @@ class Shobu:
 		self.next_mover = Player(not self.next_mover.value)
 		self.white, self.black = bit_reverse(self.black), bit_reverse(self.white)
 
+	def copy(self):
+		return Shobu(self.black, self.white, self.next_mover)
+
 	@staticmethod
 	def from_str(s: str, next_mover=Player.BLACK):
 		"""

@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from itertools import combinations
 import os
 from torch.distributions import Categorical
+import torch.nn.functional as F
 
 #### CONSTANTS ####
 DIRECTION_MAPPING = {
@@ -44,9 +45,35 @@ def seed(seed=1000):
     torch.backends.cudnn.deterministic = True
     os.environ['PYTHONHASHSEED'] = str(seed)
     os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
-    
 
-#### REPLAY BUFFER ####
+#### REPLAY BUFFER FOR MCTS ####   
+Transition_MCTS = namedtuple('Transition',
+                        ('board', 'state', 'reward', 'ucb'))
+
+class ReplayMemory_MCTS(object):
+    '''
+    Class for storing transitions
+    Reference: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
+    '''
+    def __init__(self, capacity = 100000):
+        self.memory = deque([], maxlen=capacity)
+
+    def push(self, *args):
+        """Save a transition"""
+        self.memory.append(Transition_MCTS(*args))
+
+    def sample(self, batch_size):
+        #return random.sample(self.memory, batch_size)
+        batch = [self.memory.popleft() for _ in range(min(batch_size, len(self.memory)))]  
+        return batch
+    
+    def shuffle(self):
+        self.memory = deque(random.sample(self.memory, len(self.memory)))
+
+    def __len__(self):
+        return len(self.memory)
+    
+#### REPLAY BUFFER FOR PPO ####
 
 Transition = namedtuple('Transition',
                         ('state', 'passive', 'aggressive', 'passive_probs','aggressive_probs', 'passive_mask', 'aggressive_mask', 'advantages', 'returns'))
@@ -74,8 +101,8 @@ class ReplayMemory(object):
 
     def __len__(self):
         return len(self.memory)
-    
-    
+
+
 #### BOARD GENERATION ####
 def generate_subboard():
     s = "................"
@@ -108,7 +135,7 @@ def generate_board() -> Shobu:
     s = top_right[:4] + top_left[:4] + top_right[4:8] + top_left[4:8] + top_right[8:12] + top_left[8:12] + top_right[12:] + top_left[12:] + bot_right[:4] + bot_left[:4] + bot_right[4:8] + bot_left[4:8] + bot_right[8:12] + bot_left[8:12] + bot_right[12:] + bot_left[12:]
     
     return Shobu.from_str(s, next_mover)
-    
+
     
 #### REPRESENTATION CONVERSIONS ####
 
@@ -254,7 +281,7 @@ def mask_passive_logits(logits: torch.tensor, valid_moves: list, device: torch.d
         pfrom = (px*8) + py 
         pidx = (pfrom * (8 * 2)) + (pd * 2) + (ps-1)
         mask[pidx] = 1
-    logits, mask = normalized_mask_logits(logits, mask)
+    logits, mask = mask_logits(logits, mask)
     return logits, mask
 
 
@@ -278,7 +305,7 @@ def mask_aggressive_logits(logits: torch.tensor, passive_move: tuple, valid_move
             (ax, ay)= move[1]
             adix = (ax*8) + ay 
             mask[adix] = 1
-    logits, mask = normalized_mask_logits(logits, mask)
+    logits, mask = mask_logits(logits, mask)
     return logits, mask
 
 
@@ -394,6 +421,39 @@ def model_action(policy_output: dict, board: Shobu, device: torch.device):
         # ShobuMove conversion
         move = convert_to_ShobuMove(passive_move, aggressive_move)
         return move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask
+
+
+#### MCTS Select Moves ####
+def get_joint_logits(board: Shobu, policy_output: dict) -> dict:
+    '''
+    Return dict mapping valid Shobu moves to probabilities from the policy net
+
+    Inputs:
+    - board: current Shobu board
+    - policy_output: output from Shobu_MCTS
+
+    Outputs:
+    - softmax_dict: mapping of Shobu moves to probabilities
+    '''
+    plogits = get_passive_logits(policy_output)
+    alogits = get_aggressive_logits(policy_output)
+    valid_shobu_moves = board.move_gen()
+    valid_moves = [convert_to_PPOMove(move) for move in valid_shobu_moves]
+    # dict
+    move_to_logit = {}
+    for i,move in enumerate(valid_moves):
+        px, py, pd, ps = move[0]
+        pfrom = (px*8) + py 
+        pidx = (pfrom * (8 * 2)) + (pd * 2) + (ps-1)
+        (ax, ay)= move[1]
+        aidx = (ax*8) + ay 
+        logit = plogits[pidx]+alogits[aidx]
+        move_to_logit[valid_shobu_moves[i]] = logit
+    
+    concatenated_tensor = torch.stack(list(move_to_logit.values()))
+    softmax_tensor = F.softmax(concatenated_tensor, dim=0)
+    softmax_dict = {key: softmax_tensor[i] for i, key in enumerate(move_to_logit)}
+    return softmax_dict
 
 
 #### LOSS FUNCTION UTILS ####
@@ -595,6 +655,71 @@ def plot_progress(reward_list, loss_list, ppo_loss_list, value_loss_list, p_entr
     ax5.tick_params(axis="y", labelcolor="tab:cyan")
     ax5.set_ylim(0, 1)
 
+
+    plt.title(f"Training Progress Episode {episode+1}")
+    fig.tight_layout()  # Adjust layout for better spacing
+    plt.grid()
+    plt.show()
+
+def plot_progress_MCTS(reward_list, loss_list, policy_loss_list, value_loss_list, episode: int):
+    '''
+    Plot training progress
+    
+    Inputs:
+    - reward_list: list of average win/loss reward/return sampled after each episode
+    - loss_list: list of average loss after each episode
+    - win_list: list of 0s and 1s representing wins by the model
+    - draw_list: list of 0s and 1s representing draws (episode terminated at max moves)
+    - plot_every: episode intervals when you plot
+    - episode: current episode/game
+    
+    Output:
+    - updated plot in a Jupyter notebook
+    '''
+    clear_output(wait=True)
+    fig, ax1 = plt.subplots(figsize=(12, 8))
+
+    # Plot rewards (left y-axis)
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Return", color="tab:blue")
+    ax1.plot(reward_list, label="Raw Batch Return", alpha=0.4, color="tab:blue")
+    
+    smoothed_rewards = exponential_moving_average(reward_list)
+    ax1.plot(range(len(smoothed_rewards)), smoothed_rewards, label="Smoothed Batch Return", color="blue", linewidth=5)
+
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+
+    # Plot losses (right y-axis)
+    ax2 = ax1.twinx()  
+    ax2.set_ylabel("PPO Loss", color="tab:orange")  
+    ax2.plot(policy_loss_list, label=" Raw Batch Policy Loss", alpha=0.2, color="tab:orange")
+    
+    smoothed_loss = exponential_moving_average(policy_loss_list)
+    ax2.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Policy Loss", color="orange", linewidth=5)
+
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
+    
+    # Plot losses (right y-axis)
+    ax6 = ax1.twinx() 
+    ax6.spines["right"].set_position(("outward", 40)) 
+    ax6.set_ylabel("Value Loss", color="tab:purple")  
+    ax6.plot(value_loss_list, label=" Raw Batch Value Loss", alpha=0.2, color="tab:purple")
+    
+    smoothed_loss = exponential_moving_average(value_loss_list)
+    ax6.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Value Loss", color="purple", linewidth=5)
+
+    ax6.tick_params(axis="y", labelcolor="tab:purple")
+
+    # Plot losses (right y-axis)
+    ax9 = ax1.twinx()  
+    ax9.spines["right"].set_position(("outward", 80)) 
+    ax9.set_ylabel("Loss", color="tab:red")  
+    ax9.plot(loss_list, label=" Raw Batch Loss", alpha=0.4, color="tab:red")
+    
+    smoothed_loss = exponential_moving_average(loss_list)
+    ax9.plot(range(len(smoothed_loss)), smoothed_loss, label="Smoothed Batch Loss", color="red", linewidth=5)
+
+    ax9.tick_params(axis="y", labelcolor="tab:red")
 
     plt.title(f"Training Progress Episode {episode+1}")
     fig.tight_layout()  # Adjust layout for better spacing
