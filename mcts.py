@@ -1,4 +1,5 @@
 import cProfile
+import copy
 from collections import deque
 from datetime import datetime
 import numpy as np
@@ -111,7 +112,7 @@ class MCTree:
         with torch.no_grad():
             output = self.model(state_tensor)
             evaluation = output['q_value']
-            move_to_probability = get_joint_logits(path[-1].state, output)
+            move_to_probability = get_joint_logits(path[-1].state, output, noise=True)
         return evaluation, move_to_probability
 
     def simulation(self):
@@ -162,6 +163,9 @@ class MCTree:
 
                 
 GAMES_PER_EPOCH = 1 # TODO tune this
+MAX_GAMES = 50000
+EPOCHS = 3 # number of epochs to train per game
+MINIBATCH_SIZE = 64
 class Shobu_MCTS_RL:
     # init
     def __init__(self, model: Shobu_MCTS, device: torch.device):
@@ -267,78 +271,80 @@ class Shobu_MCTS_RL:
         value_loss_list = []
         reward_list = []
 
-        for epoch in range(self.epochs):
+        for episode in range(MAX_GAMES):
             # Generate training data via self-play
             memory = ReplayMemory_MCTS()
             print("Simulating games...")
             for _ in range(GAMES_PER_EPOCH):
-                self.play_game(memory, epoch)
+                self.play_game(memory, episode)
 
             # TODO: consider
             # memory.augment()
+            
+            for epoch in range(EPOCHS):
+                memory_copy = copy.deepcopy(memory)
+                memory_copy.shuffle()
+                batch_policy_loss_list = []
+                batch_value_loss_list = []
+                batch_loss = []
+                batch_reward = []
+                print("Training on simulations...")
+                while memory_copy:
+                    transitions = memory_copy.sample(self.minibatch_size)
+                    batch = Transition_MCTS(*zip(*transitions))
+                    boards = batch.board
+                    states = torch.tensor(np.concatenate(batch.state), device=self.device, dtype=torch.float32)
+                    rewards = torch.tensor(np.stack(batch.reward), device=self.device, dtype=torch.float32)
+                    mcts_dist = np.stack(batch.mcts_dist)
 
-            memory.shuffle()
-            batch_policy_loss_list = []
-            batch_value_loss_list = []
-            batch_loss = []
-            batch_reward = []
-            print("Training on simulations...")
-            while memory:
-                transitions = memory.sample(self.minibatch_size)
-                batch = Transition_MCTS(*zip(*transitions))
-                boards = batch.board
-                states = torch.tensor(np.concatenate(batch.state), device=self.device, dtype=torch.float32)
-                rewards = torch.tensor(np.stack(batch.reward), device=self.device, dtype=torch.float32)
-                mcts_dist = np.stack(batch.mcts_dist)
+                    ### value loss ###
+                    values = self.model.get_value(states).squeeze()
+                    value_loss = F.mse_loss(values, rewards)
 
-                ### value loss ###
-                values = self.model.get_value(states).squeeze()
-                value_loss = F.mse_loss(values, rewards)
+                    ### policy loss ###
 
-                ### policy loss ###
-                
-                # get distributions
-                policy_losses = []
-                # compute loss per each state, since the distribution shapes are different
-                for state, board, pi_dict in zip(states, boards, mcts_dist):
-                    policy_outputs = self.model.get_policy(state.unsqueeze(0))
-                    move_to_logit = get_joint_logits(board, policy_outputs, logits=True)
-                    policy = [move_to_logit[k] for k in move_to_logit.keys()]
-                    pi = [pi_dict[k] for k in pi_dict.keys()]
-                    policy_dist = torch.stack(policy)
-                    pi_dist = torch.tensor(np.stack(pi), device=self.device, dtype=torch.float32)
-                    policy_losses.append(-torch.sum(pi_dist * F.log_softmax(policy_dist, dim=-1)))
-                policy_loss = torch.mean(torch.stack(policy_losses))
+                    # get distributions
+                    policy_losses = []
+                    # compute loss per each state, since the distribution shapes are different
+                    for state, board, pi_dict in zip(states, boards, mcts_dist):
+                        policy_outputs = self.model.get_policy(state.unsqueeze(0))
+                        move_to_logit = get_joint_logits(board, policy_outputs, logits=True)
+                        policy = [move_to_logit[k] for k in move_to_logit.keys()]
+                        pi = [pi_dict[k] for k in pi_dict.keys()]
+                        policy_dist = torch.stack(policy)
+                        pi_dist = torch.tensor(np.stack(pi), device=self.device, dtype=torch.float32)
+                        policy_losses.append(-torch.sum(pi_dist * F.log_softmax(policy_dist, dim=-1)))
+                    policy_loss = torch.mean(torch.stack(policy_losses))
 
-                ### optimize ###
-                loss = value_loss + policy_loss
-                opt.zero_grad()
-                loss.backward()
-                # can adjust this or remove entirely
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
-                opt.step()
-                scheduler.step()
+                    ### optimize ###
+                    loss = value_loss + policy_loss
+                    opt.zero_grad()
+                    loss.backward()
+                    # can adjust this or remove entirely
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
+                    opt.step()
+                    scheduler.step()
 
-                ### metrics ###
-                batch_policy_loss_list.append(policy_loss.item())
-                batch_value_loss_list.append(value_loss.item())
-                batch_loss.append(loss.item())
-                batch_reward.append(np.mean(rewards.clone().cpu().numpy()))
+                    ### metrics ###
+                    batch_policy_loss_list.append(policy_loss.item())
+                    batch_value_loss_list.append(value_loss.item())
+                    batch_loss.append(loss.item())
+                    batch_reward.append(np.mean(rewards.clone().cpu().numpy()))
         
-        ### update metrics ###
-        avg_epoch_policyloss = np.mean(batch_policy_loss_list)
-        avg_epoch_value_loss = np.mean(batch_value_loss_list)
-        avg_epoch_loss = np.mean(batch_loss)
-        avg_epoch_reward = np.mean(batch_reward)
-        policy_loss_list.append(avg_epoch_policyloss)
-        value_loss_list.append(avg_epoch_value_loss)
-        loss_list.append(avg_epoch_loss)
-        reward_list.append(avg_epoch_reward)
+                ### update metrics ###
+                avg_epoch_policyloss = np.mean(batch_policy_loss_list)
+                avg_epoch_value_loss = np.mean(batch_value_loss_list)
+                avg_epoch_loss = np.mean(batch_loss)
+                avg_epoch_reward = np.mean(batch_reward)
+                policy_loss_list.append(avg_epoch_policyloss)
+                value_loss_list.append(avg_epoch_value_loss)
+                loss_list.append(avg_epoch_loss)
+                reward_list.append(avg_epoch_reward)
 
-        ### update plot ###
-        #plot_progress_MCTS(reward_list, loss_list, policy_loss_list, value_loss_list)
+            ### update plot ###
+            plot_progress_MCTS(reward_list, loss_list, policy_loss_list, value_loss_list, episode)
 
- 
+        
 if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(True)
     device = torch.device(

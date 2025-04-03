@@ -424,7 +424,7 @@ def model_action(policy_output: dict, board: Shobu, device: torch.device):
 
 
 #### MCTS Select Moves ####
-def get_joint_logits(board: Shobu, policy_output: dict, logits=False) -> dict:
+def get_joint_logits(board: Shobu, policy_output: dict, logits=False, noise=False) -> dict:
     '''
     Return dict mapping valid Shobu moves to probabilities from the policy net
 
@@ -452,9 +452,12 @@ def get_joint_logits(board: Shobu, policy_output: dict, logits=False) -> dict:
 
     if logits:
         return move_to_logit
-    
     concatenated_tensor = torch.stack([move_to_logit[k] for k in move_to_logit.keys()])
     softmax_tensor = F.softmax(concatenated_tensor, dim=0)
+    if noise:
+        alpha = 0.5
+        eta = torch.distributions.Dirichlet(torch.full_like(softmax_tensor, alpha)).sample()
+        softmax_tensor = 0.75 * softmax_tensor + 0.25 * eta
     softmax_dict = {key: softmax_tensor[i] for i, key in enumerate(move_to_logit.keys())}
     return softmax_dict
 
