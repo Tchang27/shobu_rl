@@ -16,7 +16,7 @@ of Agents. This includes facilities for playing one-off games as well as
 round robin tournaments.
 """
 
-POOL_SIZE = 4
+POOL_SIZE = 12
 
 def play_game(
 		black_player: Agent,

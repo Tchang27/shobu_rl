@@ -1,16 +1,14 @@
 from agent import UserAgent, RandomAgent, RLAgent, MCTSAgent
-from eval import round_robin
+from eval import round_robin, n_game_match
 
 
 if __name__ == '__main__':
 	# Hopefully our players will be more interesting than this :)
-	_, elos = round_robin([
+	_, elos = n_game_match(
 		RandomAgent(),
-		#RLAgent("model_weights/ppo_checkpoint_33000.pth"), 
-		MCTSAgent("model_weights/mcts_checkpoint_10.pth"), 
-	],
-	num_rounds=10,
-	max_moves_per_game=100
+		MCTSAgent("model_weights/mcts_checkpoint_312.pth"), 
+		n=30,
+		max_moves=100
 	)
 
 	print(elos)
