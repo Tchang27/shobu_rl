@@ -1,10 +1,10 @@
 import abc
 import random
-
+import time
 from shobu import Shobu, ShobuMove, Player
 from models import Shobu_PPO, Shobu_MCTS
-from rl_utils import model_action, get_joint_logits
-from mcts import MCTree
+from rl_utils import model_action
+from mcts_sequential import MCTree
 import torch
 
 

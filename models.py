@@ -51,7 +51,7 @@ class Critic_MCTS(nn.Module):
     def __init__(self, in_channels, hidden_channels=256):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(96, 1, kernel_size=1, stride=1, padding='same'),
+            nn.Conv2d(64, 1, kernel_size=1, stride=1, padding='same'),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(in_channels, hidden_channels),
@@ -215,22 +215,22 @@ class Shobu_MCTS(nn.Module):
         
         self.backbone = nn.Sequential(
             # Block 1
-            nn.Conv2d(self.input_channels, 96, kernel_size=3, stride=1, padding='same'),
+            nn.Conv2d(self.input_channels, 64, kernel_size=3, stride=1, padding='same'),
             nn.ReLU(),
             
             # Residual blocks
-            ResidualBlock2D(96, 96),
-            ResidualBlock2D(96, 96),
-            ResidualBlock2D(96, 96),
-            ResidualBlock2D(96, 96),
-            ResidualBlock2D(96, 96),
-            ResidualBlock2D(96, 96),
+            ResidualBlock2D(64, 64),
+            ResidualBlock2D(64, 64),
+            ResidualBlock2D(64, 64),
+            ResidualBlock2D(64, 64),
+#             ResidualBlock2D(96, 96),
+#             ResidualBlock2D(96, 96),
         )
         
         # passive head
         self.passive_filter = nn.Sequential(
             # Block 1
-            nn.Conv2d(96, 2, kernel_size=1, stride=1, padding='same'),
+            nn.Conv2d(64, 2, kernel_size=1, stride=1, padding='same'),
             nn.ReLU(),
             nn.Flatten(),
         )
