@@ -183,7 +183,7 @@ class MCTree:
                 node.total_reward -= evaluation
 
                 
-GAMES_PER_EPOCH = 10 # TODO tune this
+GAMES_PER_EPOCH = 1 # TODO tune this
 MAX_GAMES = 50000
 EPOCHS = 3 # number of epochs to train per game
 MINIBATCH_SIZE = 128
@@ -337,7 +337,7 @@ class Shobu_MCTS_RL:
                     policy_losses = []
                     for state, board, pi_dict in zip(states, boards, mcts_dist):
                         policy_outputs = self.model.get_policy(state.unsqueeze(0))  # Get policy logits
-                        move_to_logit = get_joint_logits(board, policy_outputs, logits=True)
+                        move_to_logit = get_joint_logits(board, policy_outputs, logits=True, cached_moves=True)
                         policy = torch.tensor([move_to_logit[k] for k in move_to_logit.keys()], device=self.device, dtype=torch.float32)
                         pi_dist = torch.tensor([pi_dict[k] for k in pi_dict.keys()], device=self.device, dtype=torch.float32)
                         policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))

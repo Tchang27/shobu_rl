@@ -1,3 +1,4 @@
+from functools import lru_cache
 import numpy as np
 import torch
 import math
@@ -168,7 +169,7 @@ def convert_to_PPOMove(move: ShobuMove):
     # map distance
     distance = move.steps
         
-    return ((passive_start_x, passive_start_y, direction, distance), 
+    return ((passive_start_x, passive_start_y, direction, distance),
             (aggressive_start_x, aggressive_start_y))
 
 
@@ -425,9 +426,28 @@ def model_action(policy_output: dict, board: Shobu, device: torch.device):
         move = convert_to_ShobuMove(passive_move, aggressive_move)
         return move, passive_index, aggressive_index, passive_probs, aggressive_probs, passive_mask, aggressive_mask
 
+def raw_get_pidx_aidx(k: int):
+    next_mover = Player.BLACK
+    if k < 0:
+        next_mover = Player.WHITE
+        k *= -1
+    black = k >> 64
+    white = k % 2**64
+    board = Shobu(np.uint64(black), np.uint64(white), next_mover)
+    valid_shobu_moves = board.move_gen()
+    # Inline convert_to_PPOMove
+    valid_moves = [((move.passive_from.x, move.passive_from.y, DIRECTION_MAPPING[move.direction], move.steps),
+            (move.aggressive_from.x, move.aggressive_from.y)) for move in valid_shobu_moves]
+    pidx = [(px * 8 + py) * 16 + pd * 2 + (ps - 1) for (px, py, pd, ps), _ in valid_moves]
+    aidx = [(ax * 8 + ay) for _, (ax, ay) in valid_moves]
+    return valid_shobu_moves, pidx, aidx
+
+@lru_cache(maxsize=100000)
+def get_pidx_aidx(k: int) -> tuple[list[ShobuMove], list[int], list[int]]:
+    return raw_get_pidx_aidx(k)
 
 #### MCTS Select Moves ####
-def get_joint_logits(board: Shobu, policy_output: dict, logits=False, noise=False) -> dict:
+def get_joint_logits(board: Shobu, policy_output: dict, logits=False, noise=False, cached_moves=False) -> dict:
     '''
     Return dict mapping valid Shobu moves to probabilities from the policy net
 
@@ -440,10 +460,14 @@ def get_joint_logits(board: Shobu, policy_output: dict, logits=False, noise=Fals
     '''
     plogits = get_passive_logits(policy_output).squeeze()
     alogits = get_aggressive_logits(policy_output).squeeze()
-    valid_shobu_moves = board.move_gen()
-    valid_moves = [convert_to_PPOMove(move) for move in valid_shobu_moves]
-    pidx = [(px * 8 + py) * 16 + pd * 2 + (ps - 1) for (px, py, pd, ps), _ in valid_moves]
-    aidx = [(ax * 8 + ay) for _, (ax, ay) in valid_moves]
+
+    k = (-1) ** (board.next_mover.value) * (int(board.black) * (2**64) + int(board.white))
+    if cached_moves:
+        # Cached is FALSE by default because i don't want it to be used
+        # in a parallel processing context
+        valid_shobu_moves, pidx, aidx = get_pidx_aidx(k)
+    else:
+        valid_shobu_moves, pidx, aidx = raw_get_pidx_aidx(k)
 
     # Compute logits efficiently using tensor indexing
     plogit_values = plogits[pidx]
