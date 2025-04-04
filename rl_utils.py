@@ -46,8 +46,8 @@ def seed(seed=1000):
     os.environ['PYTHONHASHSEED'] = str(seed)
     os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
 
-#### REPLAY BUFFER FOR MCTS ####   
-Transition_MCTS = namedtuple('Transition',
+#### REPLAY BUFFER FOR MCTS ####
+Transition_MCTS = namedtuple('Transition_MCTS',
                         ('board', 'state', 'reward', 'mcts_dist'))
 
 class ReplayMemory_MCTS(object):
@@ -61,6 +61,9 @@ class ReplayMemory_MCTS(object):
     def push(self, *args):
         """Save a transition"""
         self.memory.append(Transition_MCTS(*args))
+
+    def extend(self, other: "ReplayMemory_MCTS"):
+        self.memory.extend(other.memory)
 
     def sample(self, batch_size):
         #return random.sample(self.memory, batch_size)

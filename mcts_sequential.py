@@ -2,8 +2,6 @@ import cProfile
 import copy
 from collections import deque
 from datetime import datetime
-from multiprocessing import Pool
-from rl_utils import ReplayMemory_MCTS, Transition_MCTS
 import numpy as np
 import torch
 import time
@@ -184,18 +182,11 @@ class MCTree:
             else:
                 node.total_reward -= evaluation
 
-
-def pickled_play_game(smr: tuple[int, "Shobu_MCTS_RL"]) -> ReplayMemory_MCTS:
-    memory = ReplayMemory_MCTS()
-    smr[1].play_game(memory, smr[0])
-    return memory
-
-
+                
 GAMES_PER_EPOCH = 10 # TODO tune this
 MAX_GAMES = 50000
 EPOCHS = 3 # number of epochs to train per game
 MINIBATCH_SIZE = 128
-POOL_SIZE = 4
 class Shobu_MCTS_RL:
     # init
     def __init__(self, model: Shobu_MCTS, device: torch.device):
@@ -232,7 +223,9 @@ class Shobu_MCTS_RL:
             # pr = cProfile.Profile()
             # pr.enable()
 
-            t0 = time.time()
+
+            # TODO: consider playout cap randomization on some moves instead
+            # of doing full tree search every time
             mcts = MCTree(self.model, board, self.device)
             # playout randomization
             full_search = False
@@ -268,8 +261,6 @@ class Shobu_MCTS_RL:
             # next player also plays black
             board.flip()
             num_moves += 1
-            t1 = time.time()
-            # print(t1 - t0)
 
             ###
             # END PROFILING
@@ -306,86 +297,84 @@ class Shobu_MCTS_RL:
         value_loss_list = []
         reward_list = []
 
-        with Pool(POOL_SIZE) as p:
-            for episode in range(MAX_GAMES):
-                print(f"Simulating games...")
-                t0 = time.time()
-                memories = p.map(pickled_play_game, [(episode, self) for _ in range(GAMES_PER_EPOCH)])
-                t1 = time.time()
-                print(f"Time for all games: {t1 - t0}")
+        for episode in range(MAX_GAMES):
+            # Generate training data via self-play
+            memory = ReplayMemory_MCTS()
+            print("Simulating games...")
+            t0 = time.time()
+            for _ in range(GAMES_PER_EPOCH):
+                self.play_game(memory, episode)
+            t1 = time.time()
+            print(f"Time for all games: {t1 - t0}")
 
-                memory = ReplayMemory_MCTS()
-                for m in memories:
-                    memory.extend(m)
-
-                # TODO: consider
-                # memory.augment()
-    
-                t0 = time.time()
-                for epoch in range(EPOCHS):
-                    memory_copy = copy.deepcopy(memory)
-                    memory_copy.shuffle()
-                    batch_policy_loss_list = []
-                    batch_value_loss_list = []
-                    batch_loss = []
-                    batch_reward = []
-                    print("Training on simulations...")
-                    while memory_copy:
-                        transitions = memory_copy.sample(self.minibatch_size)
-                        batch = Transition_MCTS(*zip(*transitions))
-                        boards = batch.board
-                        states = torch.tensor(np.concatenate(batch.state), device=self.device, dtype=torch.float32)
-                        rewards = torch.tensor(np.stack(batch.reward), device=self.device, dtype=torch.float32)
-                        mcts_dist = np.stack(batch.mcts_dist)
-    
-                        ### value loss ###
-                        values = self.model.get_value(states).squeeze()
-                        value_loss = F.mse_loss(values, rewards)
-    
-                        ### policy loss ###
-    
-                        # get distributions
-                        policy_losses = []
-                        for state, board, pi_dict in zip(states, boards, mcts_dist):
-                            policy_outputs = self.model.get_policy(state.unsqueeze(0))  # Get policy logits
-                            move_to_logit = get_joint_logits(board, policy_outputs, logits=True)
-                            policy = torch.tensor([move_to_logit[k] for k in move_to_logit.keys()], device=self.device, dtype=torch.float32)
-                            pi_dist = torch.tensor([pi_dict[k] for k in pi_dict.keys()], device=self.device, dtype=torch.float32)
-                            policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
-                        policy_loss = torch.mean(torch.stack(policy_losses))
-    
-                        ### optimize ###
-                        loss = value_loss + policy_loss
-                        opt.zero_grad()
-                        loss.backward()
-                        # can adjust this or remove entirely
-                        #torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
-                        opt.step()
-                        scheduler.step()
-    
-                        ### metrics ###
-                        batch_policy_loss_list.append(policy_loss.item())
-                        batch_value_loss_list.append(value_loss.item())
-                        batch_loss.append(loss.item())
-                        batch_reward.append(np.mean(rewards.clone().cpu().numpy()))
+            # TODO: consider
+            # memory.augment()
             
-                    ### update metrics ###
-                    avg_epoch_policyloss = np.mean(batch_policy_loss_list)
-                    avg_epoch_value_loss = np.mean(batch_value_loss_list)
-                    avg_epoch_loss = np.mean(batch_loss)
-                    avg_epoch_reward = np.mean(batch_reward)
-                    policy_loss_list.append(avg_epoch_policyloss)
-                    value_loss_list.append(avg_epoch_value_loss)
-                    loss_list.append(avg_epoch_loss)
-                    reward_list.append(avg_epoch_reward)
-                    
-    
-                ### update plot ###
-                t1 = time.time()
-                plot_progress_MCTS(reward_list, loss_list, policy_loss_list, value_loss_list, episode)
-                print(f"Training time: {t1-t0}")
-    
+            t0 = time.time()
+            for epoch in range(EPOCHS):
+                memory_copy = copy.deepcopy(memory)
+                memory_copy.shuffle()
+                batch_policy_loss_list = []
+                batch_value_loss_list = []
+                batch_loss = []
+                batch_reward = []
+                print("Training on simulations...")
+                while memory_copy:
+                    transitions = memory_copy.sample(self.minibatch_size)
+                    batch = Transition_MCTS(*zip(*transitions))
+                    boards = batch.board
+                    states = torch.tensor(np.concatenate(batch.state), device=self.device, dtype=torch.float32)
+                    rewards = torch.tensor(np.stack(batch.reward), device=self.device, dtype=torch.float32)
+                    mcts_dist = np.stack(batch.mcts_dist)
 
+                    ### value loss ###
+                    values = self.model.get_value(states).squeeze()
+                    value_loss = F.mse_loss(values, rewards)
+
+                    ### policy loss ###
+
+                    # get distributions
+                    policy_losses = []
+                    for state, board, pi_dict in zip(states, boards, mcts_dist):
+                        policy_outputs = self.model.get_policy(state.unsqueeze(0))  # Get policy logits
+                        move_to_logit = get_joint_logits(board, policy_outputs, logits=True)
+                        policy = torch.tensor([move_to_logit[k] for k in move_to_logit.keys()], device=self.device, dtype=torch.float32)
+                        pi_dist = torch.tensor([pi_dict[k] for k in pi_dict.keys()], device=self.device, dtype=torch.float32)
+                        policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
+                    policy_loss = torch.mean(torch.stack(policy_losses))
+
+                    ### optimize ###
+                    loss = value_loss + policy_loss
+                    opt.zero_grad()
+                    loss.backward()
+                    # can adjust this or remove entirely
+                    #torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
+                    opt.step()
+                    scheduler.step()
+
+                    ### metrics ###
+                    batch_policy_loss_list.append(policy_loss.item())
+                    batch_value_loss_list.append(value_loss.item())
+                    batch_loss.append(loss.item())
+                    batch_reward.append(np.mean(rewards.clone().cpu().numpy()))
+        
+                ### update metrics ###
+                avg_epoch_policyloss = np.mean(batch_policy_loss_list)
+                avg_epoch_value_loss = np.mean(batch_value_loss_list)
+                avg_epoch_loss = np.mean(batch_loss)
+                avg_epoch_reward = np.mean(batch_reward)
+                policy_loss_list.append(avg_epoch_policyloss)
+                value_loss_list.append(avg_epoch_value_loss)
+                loss_list.append(avg_epoch_loss)
+                reward_list.append(avg_epoch_reward)
+                
+
+            ### update plot ###
+            t1 = time.time()
+            plot_progress_MCTS(reward_list, loss_list, policy_loss_list, value_loss_list, episode)
+            print(f"Training time: {t1-t0}")
+
+        
 if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(True)
     device = torch.device(
