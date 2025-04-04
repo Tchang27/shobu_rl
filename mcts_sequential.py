@@ -323,7 +323,7 @@ class Shobu_MCTS_RL:
                     transitions = memory_copy.sample(self.minibatch_size)
                     batch = Transition_MCTS(*zip(*transitions))
                     boards = batch.board
-                    states = torch.tensor(np.concatenate(batch.state), device=self.device, dtype=torch.float32)
+                    states = torch.concatenate(batch.state)
                     rewards = torch.tensor(np.stack(batch.reward), device=self.device, dtype=torch.float32)
                     mcts_dist = np.stack(batch.mcts_dist)
 

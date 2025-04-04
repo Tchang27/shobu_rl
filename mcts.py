@@ -117,6 +117,7 @@ class MCTree:
         self.device = device
 
     def _value_and_policy(self, path: list[MCNode], noise=True) -> tuple[float, dict[ShobuMove, torch.tensor]]:
+        torch.set_num_threads(1)
         recent_history = path[-HISTORY_SIZE:] # not necessarily 8 elts long!!
         past_boards = []
         for node in recent_history:
@@ -334,7 +335,7 @@ class Shobu_MCTS_RL:
                         transitions = memory_copy.sample(self.minibatch_size)
                         batch = Transition_MCTS(*zip(*transitions))
                         boards = batch.board
-                        states = torch.tensor(np.concatenate(batch.state), device=self.device, dtype=torch.float32)
+                        states = torch.concatenate(batch.state)
                         rewards = torch.tensor(np.stack(batch.reward), device=self.device, dtype=torch.float32)
                         mcts_dist = np.stack(batch.mcts_dist)
     

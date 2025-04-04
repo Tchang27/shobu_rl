@@ -51,7 +51,7 @@ class Critic_MCTS(nn.Module):
     def __init__(self, in_channels, hidden_channels=256):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(256, 1, kernel_size=1, stride=1, padding='same'),
+            nn.Conv2d(96, 1, kernel_size=1, stride=1, padding='same'),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(in_channels, hidden_channels),
@@ -215,32 +215,30 @@ class Shobu_MCTS(nn.Module):
         
         self.backbone = nn.Sequential(
             # Block 1
-            nn.Conv2d(self.input_channels, 256, kernel_size=3, stride=1, padding='same'),
+            nn.Conv2d(self.input_channels, 96, kernel_size=3, stride=1, padding='same'),
             nn.ReLU(),
             
             # Residual blocks
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
+            ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
         )
         
         # passive head
         self.passive_filter = nn.Sequential(
             # Block 1
-            nn.Conv2d(256, 2, kernel_size=1, stride=1, padding='same'),
+            nn.Conv2d(96, 2, kernel_size=1, stride=1, padding='same'),
             nn.ReLU(),
             nn.Flatten(),
         )
         self.fc_input_size = self._calculate_fc_input_size(num_boards, board_size)
         
         self.passive_pos_head = MLP_Head(self.fc_input_size, 64, hidden_channels=64)
-        self.passive_dir_head = MLP_Head(self.fc_input_size+64, 8, hidden_channels=16)
-        self.passive_dist_head = MLP_Head(self.fc_input_size+72, 2, hidden_channels=8)
+        self.passive_dir_head = MLP_Head(self.fc_input_size+64, 8, hidden_channels=64)
+        self.passive_dist_head = MLP_Head(self.fc_input_size+72, 2, hidden_channels=64)
         # aggressive head (conditioned on first move)
         self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64, hidden_channels=64)
         
