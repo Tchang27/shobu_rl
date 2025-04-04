@@ -16,6 +16,8 @@ of Agents. This includes facilities for playing one-off games as well as
 round robin tournaments.
 """
 
+POOL_SIZE = 4
+
 def play_game(
 		black_player: Agent,
 		white_player: Agent,
@@ -132,7 +134,7 @@ def round_robin(
 	rounds = [[(rated_agents, max_moves_per_game, p[0], p[1]) for p in product(range(num_players), repeat=2) if p[0] != p[1]]] * num_rounds
 	win_matrix = np.zeros((num_players, num_players))
 
-	with Pool(12) as p:
+	with Pool(POOL_SIZE) as p:
 		for round in tqdm(rounds):
 			random.shuffle(round)  # this may be good or bad idea
 			num_decisive = 0
@@ -148,3 +150,66 @@ def round_robin(
 
 	elos = list(map(lambda ra: ra.rating, rated_agents))
 	return win_matrix, elos
+
+def get_WDL_from_round_robin(win_matrix: np.ndarray, A: int, B: int, num_rounds=10) -> tuple[int, int, int]:
+	"""
+	Given the results of a round-robin tournament, get W-D-L stats for
+	player A vs. player B (i.e. player A won W times and lost L times)
+
+	:param win_matrix: the win_matrix (first return value) from round_robin
+	:param A: the index of player A in the list of Agents which was passed into
+		round_robin
+	:param B: the index of player B in the list of Agents which was passed into
+		round_robin
+	:param num_rounds: the number of rounds that the tournament went on for.
+	:return: (w, d, l)
+	"""
+	return (win_matrix[A][B], num_rounds * 2 - win_matrix[A][B] - win_matrix[B][A], win_matrix[B][A])
+
+def n_game_match(a: Agent, b: Agent, n: int = 10, max_moves: int = 100, k: int = 24) -> tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int], tuple[int, int]]:
+	"""
+	Play n (default 10) games between agents A and B, and returns (
+		(W,D,L) overall,
+		(W,D,L) as BLACK,
+		(W,D,L) as WHITE,
+		(Elo A, Elo B)
+	).
+	Note the first return value is the sum of the second and third return values.
+	Examine the second and third values to see if there are significant differences
+	between the two.
+	"""
+
+	num_games_as_white = n // 2
+	num_games_as_black = n - num_games_as_white
+	rated_agents: list[RatedAgent] = [RatedAgent(a), RatedAgent(b)]
+	games = [(rated_agents, max_moves, 0, 1)] * num_games_as_black + [(rated_agents, max_moves, 1, 0)] * num_games_as_white
+	random.shuffle(games) # definitely not needed unless some seeding is going on
+	with Pool(POOL_SIZE) as p:
+		results = p.map(_run_game_and_update, games)
+
+	overall = [0, 0, 0]
+	as_black = [0, 0, 0]
+	as_white = [0, 0, 0]
+	for (b_i, w_i, result) in results:
+		old_b_elo = rated_agents[b_i].update(Player.BLACK, result, rated_agents[w_i].rating, k)
+		rated_agents[w_i].update(Player.WHITE, result, old_b_elo, k)
+		if result is None:
+			overall[1] += 1
+			if b_i == 0: as_black[1] += 1 # player A was playing black and drew
+			else: as_white[1] += 1 # player A was playing white and drew
+		elif result == Player.BLACK:
+			if b_i == 0: # player A was playing black and won
+				as_black[0] += 1
+				overall[0] += 1
+			else: # player A was playing white and lost
+				as_white[2] += 1
+				overall[2] += 1
+		else:
+			if b_i == 0: # player A was playing black and lost
+				as_black[2] += 1
+				overall[2] += 1
+			else: # player A was playing white and won
+				as_white[0] += 1
+				overall[0] += 1
+
+	return tuple(overall), tuple(as_black), tuple(as_white), (rated_agents[0].rating, rated_agents[1].rating)
