@@ -319,7 +319,7 @@ class Shobu_MCTS_RL:
             for episode in range(MAX_GAMES):
                 print(f"Simulating games...")
                 t0 = time.time()
-                memories = memories = p.map(pickled_play_game, [(episode, game_num, self) for game_num in range(GAMES_PER_EPOCH)])
+                memories = p.map(pickled_play_game, [(episode, game_num, self) for game_num in range(GAMES_PER_EPOCH)])
                 t1 = time.time()
                 print(f"Time for all games: {t1 - t0}")
 
