@@ -2,7 +2,7 @@ import cProfile
 import copy
 from collections import deque
 from datetime import datetime
-from torch.multiprocessing import Pool, set_sharing_strategy, set_start_method, Queue, Process
+from torch.multiprocessing import Lock, set_sharing_strategy, set_start_method, Queue, Process
 from rl_utils import ReplayMemory_MCTS, Transition_MCTS
 import numpy as np
 import torch
@@ -15,11 +15,7 @@ import gc
 import psutil
 from shobu import ShobuMove, Shobu, Player
 
-MAX_GAME_LEN = 5
-device = torch.device(
-    "cuda" if torch.cuda.is_available() else
-    "cpu"
-)
+MAX_GAME_LEN = 256
 
 
 class MCNode:
@@ -277,16 +273,49 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
             history.popleft()
             
             
-GAMES_PER_EPOCH = 96 # TODO tune this
-MAX_GAMES = 10000
-EPOCHS = 15 # number of epochs to train per game
-MINIBATCH_SIZE = 256
-
+MINIBATCH_SIZE = 5
 POOL_SIZE = 16
 WINDOW_SIZE = 50000 # TODO tune this
-WARMUP = 5000
+WARMUP = 10000
+
+# torch multiproc queue to enable sampling
+class SamplingQueue:
+    def __init__(self, max_size, lock):
+        self.max_size = max_size
+        self.queue = torch.multiprocessing.Queue(max_size)
+        self.lock = lock
+
+    def put_all(self, items):
+        with self.lock:
+            for item in items:
+                if self.queue.qsize() >= self.max_size:
+                    self.queue.get_nowait()  # Discard the oldest item if the queue is full
+                self.queue.put(item)
+
+    def sample_batch(self, batch_size):
+        with self.lock:
+            items = []
+            if self.queue.qsize() == 0:
+                return []  # No items to sample from if the queue is empty
+
+            # Transfer all items from the queue to a list
+            while not self.queue.empty():
+                items.append(self.queue.get_nowait())
+
+            # Randomly sample a batch of items from the list (without replacement)
+            sampled_items = random.sample(items, min(batch_size, len(items)))
+
+            # Put all the items back into the queue (preserving the original state of the queue)
+            for item in items:
+                self.queue.put(item)
+
+        return sampled_items
+    
+    def qsize(self):
+        return self.queue.qsize()
             
-def pickled_play_game(model_state_dict, buffer, seed):
+# worker process for simulating game        
+def pickled_play_game(model_state_dict, buffer, device, seed):
     torch.set_num_threads(1)
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -296,13 +325,10 @@ def pickled_play_game(model_state_dict, buffer, seed):
     while True:
         memory = ReplayMemory_MCTS()
         play_game(local_model, device, memory, episode)
-        for transition in memory.memory:
-            if buffer.qsize() > WINDOW_SIZE:
-                buffer.get_nowait()
-            buffer.put(transition)
+        buffer.put_all(list(memory.memory)) 
         episode += 1     
         
-
+# class for rl training
 class Shobu_MCTS_RL:
     # init
     def __init__(self, device: torch.device):
@@ -336,20 +362,15 @@ class Shobu_MCTS_RL:
         batch_size = MINIBATCH_SIZE
         while buffer.qsize() < WARMUP:
             print(f"Warming up... ({buffer.qsize()})")
-            time.sleep(1)
+            time.sleep(60)
         
         # train step
         epoch = 0
         while True:
-            print(buffer.qsize())
+            print(f"Rolling window size: {buffer.qsize()}")
             t0 = time.time()
-            items = []
-            while not buffer.empty():
-                items.append(buffer.get_nowait())
-            for item in items:
-                buffer.put_nowait(item)
             # Randomly sample a batch of items
-            minibatch = random.sample(items, min(batch_size, len(items)))
+            minibatch = buffer.sample_batch(batch_size)
             batch = Transition_MCTS(*zip(*minibatch))
             boards = batch.board
             states = torch.concatenate(batch.state)
@@ -379,7 +400,6 @@ class Shobu_MCTS_RL:
             total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             opt.step()
             scheduler.step()
-            print(f"Trained on batch, loss = {loss:.4f}")
 
             ### metrics ###
             policy_loss_list.append(policy_loss.item())
@@ -392,6 +412,7 @@ class Shobu_MCTS_RL:
             t1 = time.time()
             plot_progress_MCTS(reward_list, loss_list, policy_loss_list, value_loss_list, epoch)
             print(f"Train step time: {t1-t0}")
+            print(f"Trained on batch, loss = {loss:.4f}")
 
             # save checkpoints
             if ((epoch+1)%500) == 0:
@@ -414,14 +435,16 @@ class Shobu_MCTS_RL:
         set_start_method('spawn', force=True)
         
         # model
-        model = Shobu_MCTS(device)
-        model.to(device)
-        
-        replay_buffer = Queue(maxsize=WINDOW_SIZE) 
+        model = Shobu_MCTS(self.device)
+        model.to(self.device)
+                
+        # buffer
+        lock = Lock()
+        replay_buffer = SamplingQueue(WINDOW_SIZE, lock)
 
         workers = []
         for i in range(POOL_SIZE):
-            p = Process(target=pickled_play_game, args=(model.state_dict(), replay_buffer, 42 + i))
+            p = Process(target=pickled_play_game, args=(model.state_dict(), replay_buffer, self.device, 42 + i))
             p.start()
             workers.append(p)
 
