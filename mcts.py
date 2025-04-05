@@ -2,7 +2,7 @@ import cProfile
 import copy
 from collections import deque
 from datetime import datetime
-from multiprocessing import Pool
+from torch.multiprocessing import Pool, Queue
 from rl_utils import ReplayMemory_MCTS, Transition_MCTS
 import numpy as np
 import torch
@@ -187,9 +187,15 @@ class MCTree:
                 node.total_reward -= evaluation
 
 
-def pickled_play_game(smr: tuple[int, "Shobu_MCTS_RL"]) -> ReplayMemory_MCTS:
+def pickled_play_game(smr: tuple[int, int, "Shobu_MCTS_RL"]) -> ReplayMemory_MCTS:
+    episode, game_num = smr[0], smr[1]
+    
+    seed = episode * 1000 + game_num
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    
     memory = ReplayMemory_MCTS()
-    smr[1].play_game(memory, smr[0])
+    smr[2].play_game(memory, episode)
     return memory
 
 
@@ -299,7 +305,7 @@ class Shobu_MCTS_RL:
 
             if len(history) >= HISTORY_SIZE:
                 history.popleft()
-
+                
     # train
     def train(self, opt: torch.optim.Optimizer, scheduler: torch.optim.lr_scheduler._LRScheduler):
         self.model.train()
@@ -313,7 +319,7 @@ class Shobu_MCTS_RL:
             for episode in range(MAX_GAMES):
                 print(f"Simulating games...")
                 t0 = time.time()
-                memories = p.map(pickled_play_game, [(episode, self) for _ in range(GAMES_PER_EPOCH)])
+                memories = memories = p.map(pickled_play_game, [(episode, game_num, self) for game_num in range(GAMES_PER_EPOCH)])
                 t1 = time.time()
                 print(f"Time for all games: {t1 - t0}")
 
@@ -387,7 +393,7 @@ class Shobu_MCTS_RL:
                 print(f"Training time: {t1-t0}")
                 
                 # save checkpoints
-                if ((episode+1)%50) == 0:
+                if ((episode+1)%10) == 0:
                     torch.save(self.model.state_dict(), f'mcts_checkpoints/mcts_checkpoint_{episode+1}.pth')
 
             # save final model
