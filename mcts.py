@@ -194,10 +194,7 @@ def temperature_scheduler(epoch_no, move_no):
         return (60 - move_no) / 30
 
     
-def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
-    # to avoid file descriptor issues
-    set_sharing_strategy('file_system')
-    
+def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):    
     board = Shobu.starting_position()
     generated_training_data = []
     num_moves = 0
@@ -273,10 +270,10 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
             history.popleft()
             
             
-MINIBATCH_SIZE = 5
-POOL_SIZE = 16
-WINDOW_SIZE = 50000 # TODO tune this
-WARMUP = 10000
+MINIBATCH_SIZE = 512
+POOL_SIZE = 24
+WINDOW_SIZE = 100000 # TODO tune this
+WARMUP = 5000
 
 # torch multiproc queue to enable sampling
 class SamplingQueue:
@@ -284,14 +281,17 @@ class SamplingQueue:
         self.max_size = max_size
         self.queue = torch.multiprocessing.Queue(max_size)
         self.lock = lock
-
+    
+    # lock to maintain consecutive transitions
     def put_all(self, items):
         with self.lock:
             for item in items:
                 if self.queue.qsize() >= self.max_size:
                     self.queue.get_nowait()  # Discard the oldest item if the queue is full
                 self.queue.put(item)
-
+    
+    # lock to sample and put back, Queue doesn't support sampling
+    # TODO: implement priority sampling
     def sample_batch(self, batch_size):
         with self.lock:
             items = []
@@ -315,14 +315,18 @@ class SamplingQueue:
         return self.queue.qsize()
             
 # worker process for simulating game        
-def pickled_play_game(model_state_dict, buffer, device, seed):
+def pickled_play_game(shared_model, buffer, device, seed):
+    # to avoid file descriptor issues
+    set_sharing_strategy('file_system')
     torch.set_num_threads(1)
+    
     torch.manual_seed(seed)
     np.random.seed(seed)
     local_model = Shobu_MCTS(device)
-    local_model.load_state_dict(model_state_dict)
+    local_model.load_state_dict(shared_model.state_dict())
     episode = 0
     while True:
+        local_model.load_state_dict(shared_model.state_dict())
         memory = ReplayMemory_MCTS()
         play_game(local_model, device, memory, episode)
         buffer.put_all(list(memory.memory)) 
@@ -362,7 +366,7 @@ class Shobu_MCTS_RL:
         batch_size = MINIBATCH_SIZE
         while buffer.qsize() < WARMUP:
             print(f"Warming up... ({buffer.qsize()})")
-            time.sleep(60)
+            time.sleep(1)
         
         # train step
         epoch = 0
@@ -413,6 +417,7 @@ class Shobu_MCTS_RL:
             plot_progress_MCTS(reward_list, loss_list, policy_loss_list, value_loss_list, epoch)
             print(f"Train step time: {t1-t0}")
             print(f"Trained on batch, loss = {loss:.4f}")
+            
 
             # save checkpoints
             if ((epoch+1)%500) == 0:
@@ -437,6 +442,7 @@ class Shobu_MCTS_RL:
         # model
         model = Shobu_MCTS(self.device)
         model.to(self.device)
+        model.share_memory()
                 
         # buffer
         lock = Lock()
@@ -444,7 +450,7 @@ class Shobu_MCTS_RL:
 
         workers = []
         for i in range(POOL_SIZE):
-            p = Process(target=pickled_play_game, args=(model.state_dict(), replay_buffer, self.device, 42 + i))
+            p = Process(target=pickled_play_game, args=(model, replay_buffer, self.device, 42 + i))
             p.start()
             workers.append(p)
 
