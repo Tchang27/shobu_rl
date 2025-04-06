@@ -7,13 +7,11 @@ class ResidualBlock2D(nn.Module):
         super(ResidualBlock2D, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding='same')
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding='same')
-        self.bn1 = nn.BatchNorm2d(out_channels)
-        self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         residual = x
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
+        out = F.relu(self.conv1(x))
+        out = self.conv2(out)
         out += residual
         out = F.relu(out)
         return out
@@ -54,7 +52,6 @@ class Critic_MCTS(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv2d(64, 1, kernel_size=1, stride=1, padding='same'),
-            nn.BatchNorm2d(1),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(in_channels, hidden_channels),
@@ -219,7 +216,6 @@ class Shobu_MCTS(nn.Module):
         self.backbone = nn.Sequential(
             # Block 1
             nn.Conv2d(self.input_channels, 64, kernel_size=3, stride=1, padding='same'),
-            nn.BatchNorm2d(64),
             nn.ReLU(),
             
             # Residual blocks
@@ -235,7 +231,6 @@ class Shobu_MCTS(nn.Module):
         self.passive_filter = nn.Sequential(
             # Block 1
             nn.Conv2d(64, 2, kernel_size=1, stride=1, padding='same'),
-            nn.BatchNorm2d(2),
             nn.ReLU(),
             nn.Flatten(),
         )
