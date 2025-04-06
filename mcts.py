@@ -2,7 +2,8 @@ import cProfile
 import copy
 from collections import deque
 from datetime import datetime
-from torch.multiprocessing import Lock, set_sharing_strategy, set_start_method, Queue, Process, Manager
+from torch.multiprocessing import set_sharing_strategy, set_start_method
+import torch.multiprocessing as mp
 from rl_utils import ReplayMemory_MCTS, Transition_MCTS
 import numpy as np
 import torch
@@ -14,6 +15,7 @@ from models import Shobu_MCTS, HISTORY_SIZE
 import gc
 import psutil
 from shobu import ShobuMove, Shobu, Player
+import random
 
 MAX_GAME_LEN = 256
 
@@ -276,52 +278,83 @@ MINIBATCH_SIZE = 256
 POOL_SIZE = 16
 WINDOW_SIZE = 100000 # TODO tune this
 WARMUP = 5000
-# torch multiproc queue to enable sampling
+# torch multiproc queue to enable sampling    
 class SharedQueue:
-    def __init__(self, maxlen):
-        manager = Manager()
-        self.data = manager.list()
+    """
+    A shared reservoir sampling implementation.
+    Guarantees uniform random sampling even during buffer filling.
+    """
+    def __init__(self, maxlen, manager, lock):
+        self.buffer = manager.list([None] * maxlen)
         self.maxlen = maxlen
-        self.lock = Lock()
+        self.lock = lock
+        self.size = manager.Value('i', 0)
+        self.position = manager.Value('i', 0)
 
     def put_all(self, items):
+        """Add multiple items to the buffer."""
         with self.lock:
-            total_new = len(items)
-            current_len = len(self.data)
-            overflow = (current_len + total_new) - self.maxlen
-            if overflow > 0:
-                for _ in range(overflow):
-                    self.data.pop(0)
-            self.data.extend(items)
+            for item in items:
+                # Get current position and wrap around if necessary
+                pos = self.position.value
+                self.buffer[pos] = item
+                
+                # Update position for next insertion
+                self.position.value = (pos + 1) % self.maxlen
+                
+                # Update size
+                if self.size.value < self.maxlen:
+                    self.size.value += 1
 
     def sample_batch(self, batch_size):
+        """Sample a batch of items without removing them."""
         with self.lock:
-            return random.sample(list(self.data), min(batch_size, len(self.data)))
+            # Get current valid indices
+            current_size = self.size.value
+            if current_size == 0:
+                return []
+                
+            # Convert to list to make sampling easier
+            valid_indices = list(range(current_size)) if current_size < self.maxlen else list(range(self.maxlen))
+            sampled_indices = random.sample(valid_indices, min(batch_size, len(valid_indices)))
+            
+            # For a circular buffer, need to map to actual positions
+            if current_size < self.maxlen:
+                # Buffer hasn't wrapped yet, indices are direct
+                results = [self.buffer[i] for i in sampled_indices]
+            else:
+                # Buffer has wrapped, need to offset from current position
+                curr_pos = self.position.value
+                results = [self.buffer[(curr_pos + i) % self.maxlen] for i in sampled_indices]
+                
+            return results
 
     def __len__(self):
-        return len(self.data)
-       
+        return self.size.value
         
 # worker process for simulating game        
 def pickled_play_game(shared_model, buffer, lock, device, seed):
     # to avoid file descriptor issues
     set_sharing_strategy('file_system')
     torch.set_num_threads(1)
-    
+        
     torch.manual_seed(seed)
     np.random.seed(seed)
     local_model = Shobu_MCTS(device)
     local_model.load_state_dict(shared_model.state_dict())
     episode = 0
     while True:
-        with lock:
-            snapshot = shared_model.state_dict()
-        local_model.load_state_dict(snapshot)
-        memory = ReplayMemory_MCTS()
-        play_game(local_model, device, memory, episode)
-        buffer.put_all(list(memory.memory)) 
-        episode += 1     
-    
+        try:
+            with lock:
+                snapshot = shared_model.state_dict()
+            local_model.load_state_dict(snapshot)
+            memory = ReplayMemory_MCTS()
+            play_game(local_model, device, memory, episode)
+            buffer.put_all(list(memory.memory)) 
+            episode += 1 
+        except Exception as e:
+            print(f"[Worker error]: {e}")
+            
     
 # class for rl training
 class Shobu_MCTS_RL:
@@ -366,6 +399,10 @@ class Shobu_MCTS_RL:
             t0 = time.time()
             # Randomly sample a batch of items
             minibatch = buffer.sample_batch(batch_size)
+            if not minibatch:
+                print("Minibatch was empty, skipping train step.")
+                time.sleep(1)
+                continue
             batch = Transition_MCTS(*zip(*minibatch))
             boards = batch.board
             states = torch.concatenate(batch.state)
@@ -430,27 +467,29 @@ class Shobu_MCTS_RL:
         # multiproc setting for torch
         set_sharing_strategy('file_system')
         set_start_method('spawn', force=True)
+        mp_ctx = mp.get_context('spawn')
+        manager = mp_ctx.Manager()
+        lock = mp_ctx.Lock()
         
         # model
         model = Shobu_MCTS(self.device)
         model.to(self.device)
         # share model memory
         model.share_memory()
-        lock = Lock()
                 
         # buffer
-        replay_buffer = SharedQueue(WINDOW_SIZE)
+        replay_buffer = SharedQueue(WINDOW_SIZE, manager, lock)
 
         workers = []
         for i in range(POOL_SIZE):
-            p = Process(target=pickled_play_game, args=(model, replay_buffer, lock, self.device, 42 + i))
+            p = mp_ctx.Process(target=pickled_play_game, args=(model, replay_buffer, lock, self.device, 42 + i))
             p.start()
             workers.append(p)
 
         self.train_loop(model, replay_buffer, lock)
 
         for w in workers:
-            p.join()
+            w.join()
     
 
 if __name__ == "__main__":
