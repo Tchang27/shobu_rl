@@ -8,6 +8,7 @@ import numpy as np
 from agent import Agent, RLAgent
 from shobu import Player, Shobu
 import torch
+import numpy as np
 from rl_utils import get_board_representation
 
 """
@@ -90,9 +91,11 @@ class RatedAgent:
 
 # Picklable function
 def _run_game_and_update(args):
-	rated_agents, max_moves, id_a, id_b = args
+	rated_agents, max_moves, id_a, id_b, seed = args
 	black = rated_agents[id_a]
 	white = rated_agents[id_b]
+	torch.manual_seed(seed)
+	np.random.seed(seed)
 	return (id_a, id_b, play_game(black.agent, white.agent, max_moves=max_moves))
 
 
@@ -184,8 +187,9 @@ def n_game_match(a: Agent, b: Agent, n: int = 10, max_moves: int = 100, k: int =
 	rated_agents: list[RatedAgent] = [RatedAgent(a), RatedAgent(b)]
 	games = [(rated_agents, max_moves, 0, 1)] * num_games_as_black + [(rated_agents, max_moves, 1, 0)] * num_games_as_white
 	random.shuffle(games) # definitely not needed unless some seeding is going on
+	games_and_seeds = [(*game, random.randint(1, 1000000)) for game in games]
 	with Pool(POOL_SIZE) as p:
-		results = p.map(_run_game_and_update, games)
+		results = p.map(_run_game_and_update, games_and_seeds)
 
 	overall = [0, 0, 0]
 	as_black = [0, 0, 0]
