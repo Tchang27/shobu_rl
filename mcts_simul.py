@@ -2,7 +2,7 @@ import cProfile
 import copy
 from collections import deque
 from datetime import datetime
-from torch.multiprocessing import set_sharing_strategy, set_start_method
+from torch.multiprocessing import set_sharing_strategy, set_start_method, Queue
 import torch.multiprocessing as mp
 from rl_utils import ReplayMemory_MCTS, Transition_MCTS
 import numpy as np
@@ -215,8 +215,9 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         if np.random.random() < 0.75:
             rollout = mcts.search(100, noise=False)
         else:
-            rollout = mcts.search(400, noise=True)
+            rollout = mcts.search(600, noise=True)
             full_search = True
+        del mcts
         _sum_pi = sum([child.num_visits for child in rollout.children.values()])
 
         # This is what policy should learn
@@ -244,6 +245,8 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         # next player also plays black
         board.flip()
         num_moves += 1
+        
+        gc.collect()
 
         ###
         # END PROFILING
@@ -275,63 +278,10 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
             
 #### MULTIPROC TRAINING+SIMUL ####            
 MINIBATCH_SIZE = 256
-POOL_SIZE = 52
+POOL_SIZE = 48
 TRAINER_SIZE = 8
 WINDOW_SIZE = 50000 # TODO tune this
-WARMUP = 2000
-# torch multiproc queue to enable sampling    
-class SharedQueue:
-    """
-    A shared reservoir sampling implementation.
-    Guarantees uniform random sampling even during buffer filling.
-    """
-    def __init__(self, maxlen, manager, lock):
-        self.buffer = manager.list([None] * maxlen)
-        self.maxlen = maxlen
-        self.lock = lock
-        self.size = manager.Value('i', 0)
-        self.position = manager.Value('i', 0)
-
-    def put_all(self, items):
-        """Add multiple items to the buffer."""
-        with self.lock:
-            for item in items:
-                # Get current position and wrap around if necessary
-                pos = self.position.value
-                self.buffer[pos] = item
-                
-                # Update position for next insertion
-                self.position.value = (pos + 1) % self.maxlen
-                
-                # Update size
-                if self.size.value < self.maxlen:
-                    self.size.value += 1
-
-    def sample_batch(self, batch_size):
-        """Sample a batch of items without removing them."""
-        with self.lock:
-            # Get current valid indices
-            current_size = self.size.value
-            if current_size == 0:
-                return []
-                
-            # Convert to list to make sampling easier
-            valid_indices = list(range(current_size)) if current_size < self.maxlen else list(range(self.maxlen))
-            sampled_indices = random.sample(valid_indices, min(batch_size, len(valid_indices)))
-            
-            # For a circular buffer, need to map to actual positions
-            if current_size < self.maxlen:
-                # Buffer hasn't wrapped yet, indices are direct
-                results = [self.buffer[i] for i in sampled_indices]
-            else:
-                # Buffer has wrapped, need to offset from current position
-                curr_pos = self.position.value
-                results = [self.buffer[(curr_pos + i) % self.maxlen] for i in sampled_indices]
-                
-            return results
-
-    def __len__(self):
-        return self.size.value
+WARMUP = 5000      
         
 # worker process for simulating game        
 def pickled_play_game(shared_model, buffer, lock, device, seed):
@@ -348,13 +298,17 @@ def pickled_play_game(shared_model, buffer, lock, device, seed):
         try:
             with lock:
                 snapshot = shared_model.state_dict()
-            local_model.load_state_dict(snapshot)
+                local_model.load_state_dict(snapshot)
             memory = ReplayMemory_MCTS()
             play_game(local_model, device, memory, episode)
-            buffer.put_all(list(memory.memory)) 
+            with lock:
+                for m in memory.memory:
+                    buffer.put(m) 
+            del memory
             episode += 1 
         except Exception as e:
             print(f"[Worker error]: {e}")
+        gc.collect()
             
 
 # class for rl training
@@ -367,7 +321,11 @@ class Shobu_MCTS_RL:
     
     
     def train_loop(self, model, buffer, lock):
+        set_sharing_strategy('file_system')
         torch.set_num_threads(TRAINER_SIZE)
+        
+        # local buffer
+        local_buffer = deque(maxlen=WINDOW_SIZE)
         
         # metrics
         loss_list = []
@@ -392,17 +350,22 @@ class Shobu_MCTS_RL:
         tot1 = time.time()
         # warm up period
         batch_size = MINIBATCH_SIZE
-        while len(buffer) < WARMUP:
-            print(f"Warming up... ({len(buffer)})")
-            time.sleep(30)
+        while buffer.qsize() < WARMUP:
+            print(f"Warming up... ({buffer.qsize()})")
+            time.sleep(10)
         
         # train step
         epoch = 0
         while True:
-            print(f"Rolling window size: {len(buffer)}")
+            # empty simulations
+            with lock:
+                while buffer.qsize() > 0:
+                    local_buffer.append(buffer.get())
+                
+            print(f"Rolling window size: {len(local_buffer)}")
             t0 = time.time()
             # Randomly sample a batch of items
-            minibatch = buffer.sample_batch(batch_size)
+            minibatch = random.sample(local_buffer, batch_size)
             if not minibatch:
                 print("Minibatch was empty, skipping train step.")
                 time.sleep(1)
@@ -480,8 +443,8 @@ class Shobu_MCTS_RL:
         available_cpus = psutil.Process().cpu_affinity()
         
         # Assign CPU cores - first half to workers, second half to training
-        simulation_cores = available_cpus[1:POOL_SIZE+1]
-        training_cores = available_cpus[POOL_SIZE+1:POOL_SIZE+TRAINER_SIZE+1]
+        simulation_cores = available_cpus[:POOL_SIZE]
+        training_cores = available_cpus[POOL_SIZE:POOL_SIZE+TRAINER_SIZE]
         
         print(f"Num available cores: {len(available_cpus)}")
         print(f"Simulation cores: {simulation_cores}")
@@ -498,11 +461,12 @@ class Shobu_MCTS_RL:
         model.share_memory()
                 
         # buffer
-        replay_buffer = SharedQueue(WINDOW_SIZE, manager, lock)
+        sim_to_train_queue = Queue(maxsize=WINDOW_SIZE)
 
         workers = []
         for i in range(POOL_SIZE):
-            p = mp_ctx.Process(target=pickled_play_game, args=(model, replay_buffer, lock, self.device, 42 + i))
+            p = mp_ctx.Process(target=pickled_play_game, args=(model, sim_to_train_queue, lock, self.device, 42 + i))
+            p.daemon = True
             p.start()
             try:
                 worker_process = psutil.Process(p.pid)
@@ -522,7 +486,7 @@ class Shobu_MCTS_RL:
         
         try:
             # Run the training loop
-            self.train_loop(model, replay_buffer, lock)
+            self.train_loop(model, sim_to_train_queue, lock)
         finally:
             # Clean shutdown
             for w in workers:
