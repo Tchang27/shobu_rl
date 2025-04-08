@@ -258,8 +258,7 @@ class Shobu_MCTS_RL:
             for k in rollout.children.keys():
                 pi[k] = rollout.children[k].num_visits / _sum_pi
             # Only append full search
-            if full_search:
-                generated_training_data.append((board, pi))
+            generated_training_data.append((board, pi, full_search))
 
             # choose the next move based on tree search results
             tau = self.temperature_scheduler(epoch, num_moves)
@@ -293,8 +292,9 @@ class Shobu_MCTS_RL:
         # between -1 and 1. This "label" of -1 or 1 will be used to train the
         # value net
         generated_training_data_with_rewards = []
-        for board, pi in reversed(generated_training_data):
-            generated_training_data_with_rewards.append((board, pi, game_end_reward))
+        for board, pi, full_search in reversed(generated_training_data):
+            if full_search:
+                generated_training_data_with_rewards.append((board, pi, game_end_reward))
             game_end_reward *= -1
 
         # Push entire game history into ReplayMemory

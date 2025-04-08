@@ -17,7 +17,7 @@ import psutil
 from shobu import ShobuMove, Shobu, Player
 import random
 
-MAX_GAME_LEN = 256
+MAX_GAME_LEN = 512
 
 
 class MCNode:
@@ -225,8 +225,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         for k in rollout.children.keys():
             pi[k] = rollout.children[k].num_visits / _sum_pi
         # Only append full search
-        if full_search:
-            generated_training_data.append((board, pi))
+        generated_training_data.append((board, pi, full_search))
 
         # choose the next move based on tree search results
         tau = temperature_scheduler(epoch, num_moves)
@@ -260,8 +259,9 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
     # between -1 and 1. This "label" of -1 or 1 will be used to train the
     # value net
     generated_training_data_with_rewards = []
-    for board, pi in reversed(generated_training_data):
-        generated_training_data_with_rewards.append((board, pi, game_end_reward))
+    for board, pi, full_search in reversed(generated_training_data):
+        if full_search:
+            generated_training_data_with_rewards.append((board, pi, game_end_reward))
         game_end_reward *= -1
 
     # Push entire game history into ReplayMemory
@@ -278,8 +278,8 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
             
 #### MULTIPROC TRAINING+SIMUL ####            
 MINIBATCH_SIZE = 256
-POOL_SIZE = 48
-TRAINER_SIZE = 8
+POOL_SIZE = 26
+TRAINER_SIZE = 4
 WINDOW_SIZE = 50000 # TODO tune this
 WARMUP = 5000      
         
@@ -345,7 +345,6 @@ class Shobu_MCTS_RL:
             {'params': backbone_params, 'lr': 2e-5},
             {'params': critic_params, 'lr': 2e-5}
         ], amsgrad=True, weight_decay=3e-5)
-        scheduler = torch.optim.lr_scheduler.StepLR(opt, step_size=1000, gamma=0.5)
         
         tot1 = time.time()
         # warm up period
@@ -392,14 +391,13 @@ class Shobu_MCTS_RL:
             policy_loss = torch.mean(torch.stack(policy_losses))
 
             ### optimize ###
-            loss = value_loss + policy_loss
+            loss = 2*value_loss + policy_loss
             opt.zero_grad()
             loss.backward()
-            #total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
             # prevent workers from loading weird state dicts
             with lock:
                 opt.step()
-            scheduler.step()
 
             ### metrics ###
             policy_loss_list.append(policy_loss.item())
@@ -414,11 +412,13 @@ class Shobu_MCTS_RL:
             print(f"Train step time: {t1-t0}")
             print(f"Total time elapsed: {t1-tot1}")
             print(f"Trained on batch, loss = {loss:.4f}")
+            print(values)
+            print(rewards)
             
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
-                torch.save(model.state_dict(), f'mcts_checkpoints/mcts_checkpoint_{epoch+1}.pth')
+                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{epoch+1}.pth')
 
             # garbage collect
             gc.collect()
@@ -427,7 +427,7 @@ class Shobu_MCTS_RL:
             epoch += 1
 
         # save final model
-        torch.save(model.state_dict(), 'mcts_checkpoints/mcts_final.pth')
+        torch.save(model.state_dict(), 'mcts_checkpoints_696/mcts_final.pth')
             
                 
     # simultaneous simulation and training
@@ -457,6 +457,8 @@ class Shobu_MCTS_RL:
         # model
         model = Shobu_MCTS(self.device)
         model.to(self.device)
+        # load from previous checkpoint
+        #model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{400}.pth', map_location=self.device))
         # share model memory
         model.share_memory()
                 
