@@ -25,11 +25,11 @@ class MCNode:
         self.num_visits = 0
         self.total_reward = 0 # We want the average reward over time, total_reward / num_visits, so we save both separately
         self.children = {}
-        self.board_state = None
         self.prior = prior
         self.is_expanded = False
         self.state: Shobu = None
         self.player = player
+        self.value = None
 
     def ucb(self, child: "MCNode") -> float:
         """
@@ -106,7 +106,7 @@ class MCTree:
         self.root.state = starting_state
         self.model = model
         self.device = device
-        
+
     def __del__(self):
         self.root = None
         # Explicitly delete large objects
@@ -160,13 +160,14 @@ class MCTree:
         else:
             # get past 8 board states.
             evaluation, move_to_probability = self._value_and_policy(path_to_leaf, noise)
+            cur_node.value = evaluation
             cur_node.expansion(move_to_probability)
 
-        self.backprop(evaluation, path_to_leaf, cur_node.player) # use `evaluation` in backprop
+        self.backprop(evaluation, path_to_leaf, cur_node.player)
 
     def search(self, num_simulations: int, noise=True) -> MCNode:
-        _, move_to_probability = self._value_and_policy([self.root], noise)
-        # TODO: add dirichlet noise to move_to_probability
+        value, move_to_probability = self._value_and_policy([self.root], noise)
+        self.root.value = value
         self.root.expansion(move_to_probability)
         for _ in range(num_simulations):
             self.simulation(noise)
