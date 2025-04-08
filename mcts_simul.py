@@ -17,7 +17,7 @@ import psutil
 from shobu import ShobuMove, Shobu, Player
 import random
 
-MAX_GAME_LEN = 256
+MAX_GAME_LEN = 1024
 
 
 class MCNode:
@@ -73,7 +73,7 @@ class MCNode:
 
     def expansion(self, candidate_moves: dict[ShobuMove, torch.tensor]):
         for move, probability in candidate_moves.items():
-            self.children[move] = MCNode(probability.item(), Player(not self.player))
+            self.children[move] = MCNode(probability.item(), Player(not self.player.value))
         self.is_expanded = True
 
     def sample_move(self, tau: float) -> ShobuMove:
@@ -216,7 +216,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         if np.random.random() < 0.75:
             rollout = mcts.search(100, noise=False)
         else:
-            rollout = mcts.search(600, noise=True)
+            rollout = mcts.search(400, noise=True)
             full_search = True
         del mcts
         _sum_pi = sum([child.num_visits for child in rollout.children.values()])
@@ -388,7 +388,6 @@ class Shobu_MCTS_RL:
             ### policy loss ###
             # get distributions
             policy_losses = []
-            policy_outputs = model.get_policy(states)
             p_pos = output["passive"]["position"]
             p_dir = output["passive"]["direction"]
             p_dist = output["passive"]["distance"]
@@ -397,12 +396,12 @@ class Shobu_MCTS_RL:
             for board, pi_dict in zip(boards, mcts_dist):
                 po = {
                     "passive": {
-                        "position": p_pos[i],
-                        "direction": p_dir[i],
-                        "distance": p_dist[i],
+                        "position": p_pos[i].unsqueeze(0),
+                        "direction": p_dir[i].unsqueeze(0),
+                        "distance": p_dist[i].unsqueeze(0),
                     },
                     "aggressive": {
-                        "position": a_pos[i]
+                        "position": a_pos[i].unsqueeze(0)
                     }
                 }
                 move_to_logit = get_joint_logits(board, po, logits=True)
@@ -413,7 +412,7 @@ class Shobu_MCTS_RL:
             policy_loss = torch.mean(torch.stack(policy_losses))
 
             ### optimize ###
-            loss = value_loss + policy_loss
+            loss = value_loss + 2*policy_loss
             opt.zero_grad()
             loss.backward()
             total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
@@ -503,7 +502,7 @@ class Shobu_MCTS_RL:
         model.to(self.device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
-        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{3800}.pth', map_location=self.device))
+        #model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{3800}.pth', map_location=self.device))
         # share model memory
         model.share_memory()
                 
