@@ -7,11 +7,13 @@ class ResidualBlock2D(nn.Module):
         super(ResidualBlock2D, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding='same')
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding='same')
+        self.b1 = nn.BatchNorm2d(out_channels)
+        self.b2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         residual = x
-        out = F.relu(self.conv1(x))
-        out = self.conv2(out)
+        out = F.relu(self.b1(self.conv1(x)))
+        out = self.b2(self.conv2(out))
         out += residual
         out = F.relu(out)
         return out
@@ -34,7 +36,7 @@ class Critic(nn.Module):
     def __init__(self, in_channels, hidden_channels=256):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(256, 1, kernel_size=1, stride=1, padding='same'),
+            nn.Conv2d(256, 32, kernel_size=1, stride=1, padding='same'),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(in_channels, hidden_channels),
@@ -51,7 +53,8 @@ class Critic_MCTS(nn.Module):
     def __init__(self, in_channels, hidden_channels=256):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(64, 1, kernel_size=1, stride=1, padding='same'),
+            nn.Conv2d(96, 32, kernel_size=1, stride=1, padding='same'),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(in_channels, hidden_channels),
@@ -100,7 +103,7 @@ class Shobu_PPO(nn.Module):
         # passive head
         self.passive_filter = nn.Sequential(
             # Block 1
-            nn.Conv2d(256, 2, kernel_size=1, stride=1, padding='same'),
+            nn.Conv2d(256, 32, kernel_size=1, stride=1, padding='same'),
             nn.ReLU(),
             nn.Flatten(),
         )
@@ -113,7 +116,7 @@ class Shobu_PPO(nn.Module):
         self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64)
         
         # critic head
-        self.critic = Critic(self.fc_input_size//2, hidden_channels=16) 
+        self.critic = Critic(self.fc_input_size, hidden_channels=256) 
         
 
     def _calculate_fc_input_size(self, num_boards, board_size):
@@ -215,35 +218,37 @@ class Shobu_MCTS(nn.Module):
         
         self.backbone = nn.Sequential(
             # Block 1
-            nn.Conv2d(self.input_channels, 64, kernel_size=3, stride=1, padding='same'),
+            nn.Conv2d(self.input_channels, 96, kernel_size=3, stride=1, padding='same'),
+            nn.BatchNorm2d(96),
             nn.ReLU(),
             
             # Residual blocks
-            ResidualBlock2D(64, 64),
-            ResidualBlock2D(64, 64),
-            ResidualBlock2D(64, 64),
-            ResidualBlock2D(64, 64),
-#             ResidualBlock2D(96, 96),
-#             ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
+            ResidualBlock2D(96, 96),
         )
         
         # passive head
         self.passive_filter = nn.Sequential(
             # Block 1
-            nn.Conv2d(64, 2, kernel_size=1, stride=1, padding='same'),
+            nn.Conv2d(96, 32, kernel_size=1, stride=1, padding='same'),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Flatten(),
         )
         self.fc_input_size = self._calculate_fc_input_size(num_boards, board_size)
         
-        self.passive_pos_head = MLP_Head(self.fc_input_size, 64, hidden_channels=64)
-        self.passive_dir_head = MLP_Head(self.fc_input_size+64, 8, hidden_channels=64)
-        self.passive_dist_head = MLP_Head(self.fc_input_size+72, 2, hidden_channels=64)
+        self.passive_pos_head = MLP_Head(self.fc_input_size, 64, hidden_channels=256)
+        self.passive_dir_head = MLP_Head(self.fc_input_size+64, 8, hidden_channels=256)
+        self.passive_dist_head = MLP_Head(self.fc_input_size+72, 2, hidden_channels=256)
         # aggressive head (conditioned on first move)
-        self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64, hidden_channels=64)
+        self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64, hidden_channels=256)
         
         # critic head
-        self.critic = Critic_MCTS(self.fc_input_size//2, hidden_channels=16)
+        self.critic = Critic_MCTS(self.fc_input_size, hidden_channels=256)
         
 
     def _calculate_fc_input_size(self, num_boards, board_size):
