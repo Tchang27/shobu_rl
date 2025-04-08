@@ -17,7 +17,7 @@ import psutil
 from shobu import ShobuMove, Shobu, Player
 import random
 
-MAX_GAME_LEN = 512
+MAX_GAME_LEN = 256
 
 
 class MCNode:
@@ -293,6 +293,7 @@ def pickled_play_game(shared_model, buffer, lock, device, seed):
     np.random.seed(seed)
     local_model = Shobu_MCTS(device)
     local_model.load_state_dict(shared_model.state_dict())
+    local_model.eval()
     episode = 0
     while True:
         try:
@@ -323,6 +324,7 @@ class Shobu_MCTS_RL:
     def train_loop(self, model, buffer, lock):
         set_sharing_strategy('file_system')
         torch.set_num_threads(TRAINER_SIZE)
+        model.train()
         
         # local buffer
         local_buffer = deque(maxlen=WINDOW_SIZE)
@@ -385,13 +387,13 @@ class Shobu_MCTS_RL:
             for state, board, pi_dict in zip(states, boards, mcts_dist):
                 policy_outputs = model.get_policy(state.unsqueeze(0))  # Get policy logits
                 move_to_logit = get_joint_logits(board, policy_outputs, logits=True)
-                policy = torch.tensor([move_to_logit[k] for k in move_to_logit.keys()], device=self.device, dtype=torch.float32)
+                policy = torch.stack([move_to_logit[k] for k in move_to_logit.keys()])
                 pi_dist = torch.tensor([pi_dict[k] for k in pi_dict.keys()], device=self.device, dtype=torch.float32)
                 policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
             policy_loss = torch.mean(torch.stack(policy_losses))
 
             ### optimize ###
-            loss = 2*value_loss + policy_loss
+            loss = value_loss + 2*policy_loss
             opt.zero_grad()
             loss.backward()
             total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
@@ -412,6 +414,28 @@ class Shobu_MCTS_RL:
             print(f"Train step time: {t1-t0}")
             print(f"Total time elapsed: {t1-tot1}")
             print(f"Trained on batch, loss = {loss:.4f}")
+            print(f"Total grad norm: {total_norm}")
+            grad_norms = []
+            for param in critic_params:
+                if param.grad is not None:  # Ensure that gradient exists
+                    grad_norm = param.grad.norm()  # Compute the L2 norm of the gradient
+                    grad_norms.append(grad_norm.item())  # Convert to Python float for easier logging
+            total_grad_norm = sum(grad_norms)
+            print(f"Total grad norm for value head (critic): {total_grad_norm}")
+            grad_norms = []
+            for param in actor_params:
+                if param.grad is not None:  # Ensure that gradient exists
+                    grad_norm = param.grad.norm()  # Compute the L2 norm of the gradient
+                    grad_norms.append(grad_norm.item())  # Convert to Python float for easier logging
+            total_grad_norm = sum(grad_norms)
+            print(f"Total grad norm for policy head (actor): {total_grad_norm}")
+            grad_norms = []
+            for param in backbone_params:
+                if param.grad is not None:  # Ensure that gradient exists
+                    grad_norm = param.grad.norm()  # Compute the L2 norm of the gradient
+                    grad_norms.append(grad_norm.item())  # Convert to Python float for easier logging
+            total_grad_norm = sum(grad_norms)
+            print(f"Total grad norm for backbone: {total_grad_norm}")
             print(values)
             print(rewards)
             
@@ -457,6 +481,7 @@ class Shobu_MCTS_RL:
         # model
         model = Shobu_MCTS(self.device)
         model.to(self.device)
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
         #model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{400}.pth', map_location=self.device))
         # share model memory
