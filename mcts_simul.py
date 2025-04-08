@@ -278,8 +278,8 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
             
 #### MULTIPROC TRAINING+SIMUL ####            
 MINIBATCH_SIZE = 256
-POOL_SIZE = 26
-TRAINER_SIZE = 4
+POOL_SIZE = 30
+TRAINER_SIZE = 1
 WINDOW_SIZE = 50000 # TODO tune this
 WARMUP = 5000      
         
@@ -377,23 +377,42 @@ class Shobu_MCTS_RL:
             rewards = torch.tensor(np.stack(batch.reward), device=self.device, dtype=torch.float32)
             mcts_dist = np.stack(batch.mcts_dist)
 
+            ### model output ###
+            output = model(states)
+            
             ### value loss ###
-            values = model.get_value(states).squeeze()
+            values = output['q_value'].squeeze()
             value_loss = F.mse_loss(values, rewards)
 
             ### policy loss ###
             # get distributions
             policy_losses = []
-            for state, board, pi_dict in zip(states, boards, mcts_dist):
-                policy_outputs = model.get_policy(state.unsqueeze(0))  # Get policy logits
-                move_to_logit = get_joint_logits(board, policy_outputs, logits=True)
+            policy_outputs = model.get_policy(states)
+            p_pos = output["passive"]["position"]
+            p_dir = output["passive"]["direction"]
+            p_dist = output["passive"]["distance"]
+            a_pos = output["aggressive"]["position"]
+            i = 0
+            for board, pi_dict in zip(boards, mcts_dist):
+                po = {
+                    "passive": {
+                        "position": p_pos[i],
+                        "direction": p_dir[i],
+                        "distance": p_dist[i],
+                    },
+                    "aggressive": {
+                        "position": a_pos[i]
+                    }
+                }
+                move_to_logit = get_joint_logits(board, po, logits=True)
                 policy = torch.stack([move_to_logit[k] for k in move_to_logit.keys()])
                 pi_dist = torch.tensor([pi_dict[k] for k in pi_dict.keys()], device=self.device, dtype=torch.float32)
                 policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
+                i += 1
             policy_loss = torch.mean(torch.stack(policy_losses))
 
             ### optimize ###
-            loss = value_loss + 2*policy_loss
+            loss = value_loss + policy_loss
             opt.zero_grad()
             loss.backward()
             total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
@@ -442,7 +461,7 @@ class Shobu_MCTS_RL:
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
-                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{epoch+1}.pth')
+                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{epoch+3801}.pth')
 
             # garbage collect
             gc.collect()
@@ -483,7 +502,7 @@ class Shobu_MCTS_RL:
         model.to(self.device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
-        #model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{400}.pth', map_location=self.device))
+        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{3800}.pth', map_location=self.device))
         # share model memory
         model.share_memory()
                 
