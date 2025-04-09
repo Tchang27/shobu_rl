@@ -17,6 +17,26 @@ class ResidualBlock2D(nn.Module):
         out += residual
         out = F.relu(out)
         return out
+    
+    
+class KataGoGlobalPooling(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        # x: [batch, channels, H, W]
+        B, C, H, W = x.shape
+        board_size = H
+        
+        #Mean per channel
+        mean = x.mean(dim=[2, 3])
+
+        #Max per channel
+        max_val, _ = x.view(B, C, -1).max(dim=2)  # [B, C]
+
+        # Concatenate all
+        pooled = torch.cat([mean, max_val], dim=1)  # [B, 2C]
+        return pooled
 
     
 class MLP_Head(nn.Module):
@@ -36,7 +56,7 @@ class Critic(nn.Module):
     def __init__(self, in_channels, hidden_channels=256):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(256, 32, kernel_size=1, stride=1, padding='same'),
+            nn.Conv2d(256, 1, kernel_size=1, stride=1, padding='same'),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(in_channels, hidden_channels),
@@ -50,13 +70,11 @@ class Critic(nn.Module):
     
 
 class Critic_MCTS(nn.Module):
-    def __init__(self, in_channels, hidden_channels=256):
+    def __init__(self, in_channels=64, hidden_channels=48):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(96, 32, kernel_size=1, stride=1, bias=False, padding='same'),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Flatten(),
+            nn.Conv2d(96, 32, kernel_size=1, stride=1, bias=True, padding='same'), # b x 32 x 4 x 4
+            KataGoGlobalPooling(), # 2 x 32
             nn.Linear(in_channels, hidden_channels),
             nn.ReLU(),
             nn.Linear(hidden_channels, 1),
@@ -117,7 +135,7 @@ class Shobu_PPO(nn.Module):
         # passive head
         self.passive_filter = nn.Sequential(
             # Block 1
-            nn.Conv2d(256, 32, kernel_size=1, stride=1, padding='same'),
+            nn.Conv2d(256, 2, kernel_size=1, stride=1, padding='same'),
             nn.ReLU(),
             nn.Flatten(),
         )
@@ -130,7 +148,7 @@ class Shobu_PPO(nn.Module):
         self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64)
         
         # critic head
-        self.critic = Critic(self.fc_input_size, hidden_channels=256) 
+        self.critic = Critic(self.fc_input_size//2, hidden_channels=256) 
         
 
     def _calculate_fc_input_size(self, num_boards, board_size):
@@ -262,7 +280,7 @@ class Shobu_MCTS(nn.Module):
         self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64, hidden_channels=256)
         
         # critic head
-        self.critic = Critic_MCTS(self.fc_input_size, hidden_channels=256)
+        self.critic = Critic_MCTS(hidden_channels=48)
         
 
     def _calculate_fc_input_size(self, num_boards, board_size):
@@ -380,7 +398,7 @@ class Shobu_MCTS_Conv(nn.Module):
         self.policy = Policy_Head()
         
         # critic head
-        self.critic = Critic_MCTS(512, hidden_channels=256)
+        self.critic = Critic_MCTS(hidden_channels=48)
     
     
     def get_features(self, x):
