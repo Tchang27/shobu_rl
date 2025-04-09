@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+import os
 import readline
 
 import torch
@@ -238,6 +239,9 @@ def repl(checkpoint_path, initial_position=None, first_mover="black"):
 			print()
 			return
 		if len(cmd) == 0:
+			continue
+		if cmd[0] == "clear":
+			os.system('cls' if os.name=='nt' else 'clear')
 			continue
 		candidates = [(k, f) for k, (_, f) in commands.items() if k.startswith(cmd[0])]
 		if len(candidates) > 1:
