@@ -24,65 +24,6 @@ and learning about stats such as (and not limited to)
 
 To get started, run `./explorer.py <path-to-model-checkpoint>`, and type "h"
 or "help" to view the help menu.
-
-Here's how a session generally may look ('>' means user input):
-
-> b starting
-> v
-8 ○○○○|○○○○
-7 · · · · | · · · ·
-6 · · · · | · · · ·
-5 ●●●●|●●●●
-  --------+--------
-4 ○○○○|○○○○
-3 · · · · | · · · ·
-2 · · · · | · · · ·
-1 ●●●●|●●●●
-  a b c d   e f g h
-
-Next to move: ●
-> s 800
-> c
- f1b5N2: B(visits:  42, avg_reward: -0.027, prior: +0.004, value: -0.083)+
- g1b5NW: B(visits:  34, avg_reward: -0.025, prior: +0.006, value: -0.182)+
- g1b5NE: B(visits:  25, avg_reward: -0.021, prior: +0.005, value: -0.235)+
- g1b5N2: B(visits:  19, avg_reward: -0.019, prior: +0.005, value: -0.197)+
- a1f1N2: B(visits:  18, avg_reward: -0.022, prior: +0.003, value: -0.211)+
- f1a1N2: B(visits:  18, avg_reward: -0.022, prior: +0.004, value: -0.211)+
- c1f5NW: B(visits:  17, avg_reward: -0.015, prior: +0.005, value: -0.181)+
- ...output truncated...
-> down a1f1n2
-> t
-  [0]  <root> => B(visits: 800, avg_reward: +0.024, prior: +0.000, value: +0.010)+
-@ [1]  a1f1N2 => B(visits:  18, avg_reward: -0.022, prior: +0.003, value: -0.211)+
-> c
-  g1a1N: B(visits:  14, avg_reward: -0.026, prior: +0.008, value: -0.086)+
-  e1a1N: B(visits:   2, avg_reward: +0.079, prior: +0.008, value: -0.039)+
-  h1a1N: B(visits:   1, avg_reward: +0.028, prior: +0.008, value: +0.028)+
-	...output truncated...
-> do g1a1N
-> v
-8 ○. ○○|○○○ ·
-7 · ○· · | · · · ○
-6 · · · · | · · · ·
-5 ●●●●|●●●●
-  --------+--------
-4 ○○○○|○○○○
-3 ●· · · | · ●· ·
-2 · · · · | · · · ·
-1 · ●●●|●· ●●
-  a b c d   e f g h
-
-Next to move: ●
-> t
-  [0]  <root> => B(visits: 800, avg_reward: +0.024, prior: +0.000, value: +0.010)+
-  [1]  a1f1N2 => B(visits:  18, avg_reward: -0.022, prior: +0.003, value: -0.211)+
-@ [2]   g1a1N => B(visits:  14, avg_reward: -0.026, prior: +0.008, value: -0.086)+
-> j 0
-> t
-@ [0]  <root> => B(visits: 800, avg_reward: +0.024, prior: +0.000, value: +0.010)+
-  [1]  a1f1N2 => B(visits:  18, avg_reward: -0.022, prior: +0.003, value: -0.211)+
-  [2]   g1a1N => B(visits:  14, avg_reward: -0.026, prior: +0.008, value: -0.086)+
 """
 
 # A collection of interesting positions for testing tree search, model eval, etc
@@ -104,6 +45,7 @@ CUSTOM = Shobu.from_str(             # Just make sure the position is legal
 	wb.. wb..
 	""", next_mover=Player.WHITE)
 
+flip_white_nodes = True
 model = None
 device = None
 commands = None
@@ -133,7 +75,7 @@ def do_board(predefined_board_name):
 	cur_node = 0
 
 def _node_to_str(n):
-	return f"{'B' if n.player == Player.BLACK else 'W'}(visits: {str(n.num_visits).rjust(3)}, avg_reward: {(n.total_reward / n.num_visits if n.num_visits != 0 else 0):+0.3f}, prior: {n.prior:+0.3f}, value: {n.value:+0.3f}){'+' if n.is_expanded else ''}"
+	return f"{'B' if n.player == Player.BLACK else 'W'}(visits: {str(n.num_visits).rjust(3)}, avg_reward: {(n.total_reward / n.num_visits if n.num_visits != 0 else 0):+0.3f}, prior: {n.prior:+0.3f}, value: {n.value if n.value is None else f'{n.value:+0.3f}'}){'+' if n.is_expanded else ''}"
 
 def do_print_node():
 	if cur_node == -1:
@@ -147,7 +89,9 @@ def do_show_position():
 		print("No nodes")
 		return
 	n = nodes[cur_node]
+	if flip_white_nodes and n.player == Player.WHITE: n.state.flip()
 	print(n.state)
+	if flip_white_nodes and n.player == Player.WHITE: n.state.flip()
 
 def _do_search(num_simulations, use_noise):
 	global nodes, cur_node, moves
@@ -185,7 +129,9 @@ def do_children():
 	children = list(n.children.items())
 	children.sort(key=lambda e: e[1].num_visits, reverse=True)
 	for k, v in children:
+		if flip_white_nodes and n.player == Player.WHITE: k.flip()
 		print(f"{_lpad(k)}: {_node_to_str(v)}")
+		if flip_white_nodes and n.player == Player.WHITE: k.flip()
 
 def do_trace():
 	m = ["<root>"] + moves
@@ -214,8 +160,11 @@ def do_down(move):
 	n = nodes[cur_node]
 	next_k, next_v = None, None
 	for k, v in n.children.items():
-		if str(k).upper() == move:
-			next_k, next_v = k, v
+		if flip_white_nodes and n.player == Player.WHITE: k.flip()
+		strk = str(k)
+		if flip_white_nodes and n.player == Player.WHITE: k.flip()
+		if strk.upper() == move:
+			next_k, next_v = strk, v
 			break
 	if next_k == None:
 		print(f"{move} is not a child node.")
@@ -223,7 +172,7 @@ def do_down(move):
 	nodes = nodes[:cur_node + 1]
 	moves = moves[:cur_node] # ???
 	nodes.append(next_v)
-	moves.append(str(next_k))
+	moves.append(next_k)
 	cur_node += 1
 
 def do_jump(trace_index):
@@ -237,27 +186,50 @@ def do_jump(trace_index):
 		return
 	cur_node = idx
 
+def do_sample(tau):
+	if cur_node == -1:
+		print("No nodes")
+		return
+	n = nodes[cur_node]
+	tau = float(tau)
+	move = n.sample_move(tau)
+	if flip_white_nodes and n.player == Player.WHITE: move.flip()
+	print(move)
+	if flip_white_nodes and n.player == Player.WHITE: move.flip()
+
 commands = {
 	"board": ("Discards the current tree if it exists and sets the given board position as the current node.", do_board),
 	"print_node": ("Print information about the current node.", do_print_node),
 	"view_position": ("Print information about the current node.", do_show_position),
 	"search": ("Sets the current position as the root node (discarding the current tree), and executes a tree search from the current position (DIRICHLET DISABLED).", do_search),
-	"dsearch": ("Same thing as search, except searches with dirichlet noise enabled.", do_dirichlet_search),
+	"noise_search": ("Same thing as search, except searches with dirichlet noise enabled.", do_dirichlet_search),
 	"children": ("List the children of this node", do_children),
 	"trace": ("Show the currently explored path (all nodes from root to deepest explored child).", do_trace),
 	"up": ("Go to the parent node of this node.", do_up),
 	"down": ("Go to a child node of the current node, by specifying a move.", do_down),
 	"jump": ("Jump to a particular node in the trace.", do_jump),
+	"get_move": ("Sample the next move from this position. Choose tau=0 for strongest selection.", do_sample),
 	"help": ("Prints this help message.", do_help)
 }
 
-def repl(checkpoint_path):
+def repl(checkpoint_path, initial_position=None, first_mover="black"):
 	global device, model
 	device = torch.device("cpu")
 	model = Shobu_MCTS(device)
 	model.to(device)
 	model.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=True))
 	model.eval()
+
+	if initial_position is not None:
+		global tree, nodes, cur_node, moves
+		with open(initial_position, "r") as file:
+				board = Shobu.from_str(file.read())
+		tree = MCTree(model, board, device)
+		nodes = [tree.root]
+		moves = []
+		cur_node = 0
+	else:
+		do_board("starting")
 
 	while True:
 		try:
@@ -312,5 +284,5 @@ if True:
 		""", next_mover=Player.BLACK)
 
 if __name__ == "__main__":
-	if len(sys.argv) == 2: repl(sys.argv[1])
-	else: print(f"Usage: {sys.argv[0]} <path-to-model-checkpoint>")
+	if 2 <= len(sys.argv) <= 4: repl(*sys.argv[1:])
+	else: print(f"Usage: {sys.argv[0]} <path-to-model-checkpoint> [<path-to-initial-position>] [<first-mover>]")

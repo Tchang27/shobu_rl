@@ -322,9 +322,9 @@ class Shobu:
 		passive_piece = one << passive_piece
 		aggressive_piece = one << aggressive_piece
 
-		if bottom_right(passive_piece):
+		if (self.next_mover == Player.BLACK and bottom_right(passive_piece)) or (self.next_mover == Player.WHITE and upper_right(passive_piece)):
 			aggressive_piece = left(aggressive_piece)
-		elif bottom_left(passive_piece):
+		elif (self.next_mover == Player.BLACK and bottom_left(passive_piece)) or (self.next_mover == Player.WHITE and upper_left(passive_piece)):
 			aggressive_piece = right(aggressive_piece)
 		else:
 			return False  # passive move is not on homeboard
@@ -540,16 +540,16 @@ class Shobu:
 		:param next_mover: The next mover
 		:return: Shobu instance corresponding to the given input
 		"""
-		pieces = [c for c in s if c in ['w', 'b', '.']]
+		pieces = [c for c in s if c in ['w', 'b', '.', '●', '○', '·']][:64]
 		white = np.uint64(0)
 		black = np.uint64(0)
 		for i, p in enumerate(pieces):
 			x = i % 8
 			y = 7 - (i // 8)
 			idx = y*8 + x
-			if p == 'b':
+			if p == 'b' or p == '●':
 				black |= np.uint64(1) << np.uint64(idx)
-			elif p == 'w':
+			elif p == 'w' or p == '○':
 				white |= np.uint64(1) << np.uint64(idx)
 
 		return Shobu(black, white, next_mover)
