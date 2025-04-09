@@ -84,7 +84,7 @@ class MCNode:
         # If tau is 0, pick the most visited move
         if tau == 0:
             chosen_move = potential_moves[np.argmax(children_visit_counts)]
-        
+
         # If tau is infinity, just choose randomly
         elif tau == float('inf'):
             chosen_move = np.random.choice(potential_moves)
@@ -129,7 +129,7 @@ class MCTree:
         past_boards = [recent_history[-1].state.as_matrix()]
         state_tensor = torch.tensor(np.concatenate(past_boards), device=self.device, dtype=torch.float32).unsqueeze(0)
         ## value evaluates leaves
-        
+
         with torch.no_grad():
             output = self.model(state_tensor)
             evaluation = output['q_value'].item()
@@ -152,9 +152,9 @@ class MCTree:
 
         if (winner := cur_state.check_winner()) is not None:
             if cur_node.player == winner:
-                evaluation = 1
+                evaluation = -1 # cuz board is flipped
             else:
-                evaluation = -1
+                evaluation = 1
         elif len(path_to_leaf) >= MAX_GAME_LEN:
             evaluation = 0
         else:
@@ -197,8 +197,8 @@ def temperature_scheduler(epoch_no, move_no):
     else:
         return (60 - move_no) / 30
 
-    
-def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):    
+
+def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
     board = Shobu.starting_position()
     generated_training_data = []
     num_moves = 0
@@ -245,7 +245,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         # next player also plays black
         board.flip()
         num_moves += 1
-        
+
         gc.collect()
 
         ###
@@ -275,21 +275,21 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
 
         if len(history) >= HISTORY_SIZE:
             history.popleft()
-            
-            
-#### MULTIPROC TRAINING+SIMUL ####            
+
+
+#### MULTIPROC TRAINING+SIMUL ####
 MINIBATCH_SIZE = 256
 POOL_SIZE = 30
 TRAINER_SIZE = 1
 WINDOW_SIZE = 50000 # TODO tune this
-WARMUP = 5000      
-        
-# worker process for simulating game        
+WARMUP = 5000
+
+# worker process for simulating game
 def pickled_play_game(shared_model, buffer, lock, device, seed):
     # to avoid file descriptor issues
     set_sharing_strategy('file_system')
     torch.set_num_threads(1)
-        
+
     torch.manual_seed(seed)
     np.random.seed(seed)
     local_model = Shobu_MCTS(device)
@@ -305,13 +305,13 @@ def pickled_play_game(shared_model, buffer, lock, device, seed):
             play_game(local_model, device, memory, episode)
             with lock:
                 for m in memory.memory:
-                    buffer.put(m) 
+                    buffer.put(m)
             del memory
-            episode += 1 
+            episode += 1
         except Exception as e:
             print(f"[Worker error]: {e}")
         gc.collect()
-            
+
 
 # class for rl training
 class Shobu_MCTS_RL:
@@ -319,28 +319,28 @@ class Shobu_MCTS_RL:
     def __init__(self, device: torch.device):
         super().__init__()
         # parameters
-        self.device = device                
-    
-    
+        self.device = device
+
+
     def train_loop(self, model, buffer, lock):
         set_sharing_strategy('file_system')
         torch.set_num_threads(TRAINER_SIZE)
         model.train()
-        
+
         # local buffer
         local_buffer = deque(maxlen=WINDOW_SIZE)
-        
+
         # metrics
         loss_list = []
         policy_loss_list = []
         value_loss_list = []
         reward_list = []
-        
+
         # optimizer
         critic_params = list(model.critic.parameters())
         backbone_params = list(model.backbone.parameters())
         actor_params = [
-            p for p in model.parameters() 
+            p for p in model.parameters()
             if (not any(p is cp for cp in critic_params)) and (not any(p is bp for bp in backbone_params))
         ]  # All other params (policy heads)
         opt = torch.optim.Adam([
@@ -348,14 +348,14 @@ class Shobu_MCTS_RL:
             {'params': backbone_params, 'lr': 2e-5},
             {'params': critic_params, 'lr': 2e-5}
         ], amsgrad=True, weight_decay=3e-5)
-        
+
         tot1 = time.time()
         # warm up period
         batch_size = MINIBATCH_SIZE
         while buffer.qsize() < WARMUP:
             print(f"Warming up... ({buffer.qsize()})")
             time.sleep(10)
-        
+
         # train step
         epoch = 0
         while True:
@@ -363,7 +363,7 @@ class Shobu_MCTS_RL:
             with lock:
                 while buffer.qsize() > 0:
                     local_buffer.append(buffer.get())
-                
+
             print(f"Rolling window size: {len(local_buffer)}")
             t0 = time.time()
             # Randomly sample a batch of items
@@ -380,7 +380,7 @@ class Shobu_MCTS_RL:
 
             ### model output ###
             output = model(states)
-            
+
             ### value loss ###
             values = output['q_value'].squeeze()
             value_loss = F.mse_loss(values, rewards)
@@ -457,7 +457,7 @@ class Shobu_MCTS_RL:
             print(f"Total grad norm for backbone: {total_grad_norm}")
             print(values)
             print(rewards)
-            
+
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
@@ -471,8 +471,8 @@ class Shobu_MCTS_RL:
 
         # save final model
         torch.save(model.state_dict(), 'mcts_checkpoints_696/mcts_final.pth')
-            
-                
+
+
     # simultaneous simulation and training
     def train(self):
         # multiproc setting for torch
@@ -481,22 +481,22 @@ class Shobu_MCTS_RL:
         mp_ctx = mp.get_context('spawn')
         manager = mp_ctx.Manager()
         lock = mp_ctx.Lock()
-        
+
         # Get total CPU count
         available_cpus = psutil.Process().cpu_affinity()
-        
+
         # Assign CPU cores - first half to workers, second half to training
         simulation_cores = available_cpus[:POOL_SIZE]
         training_cores = available_cpus[POOL_SIZE:POOL_SIZE+TRAINER_SIZE]
-        
+
         print(f"Num available cores: {len(available_cpus)}")
         print(f"Simulation cores: {simulation_cores}")
         print(f"Training cores: {training_cores}")
-        
+
         # Set affinity for main process (training)
         main_process = psutil.Process(os.getpid())
         main_process.cpu_affinity(training_cores)
-        
+
         # model
         model = Shobu_MCTS(self.device)
         model.to(self.device)
@@ -505,7 +505,7 @@ class Shobu_MCTS_RL:
         #model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{3800}.pth', map_location=self.device))
         # share model memory
         model.share_memory()
-                
+
         # buffer
         sim_to_train_queue = Queue(maxsize=WINDOW_SIZE)
 
@@ -521,7 +521,7 @@ class Shobu_MCTS_RL:
             except Exception as e:
                 print(f"Could not set affinity for worker {i}: {e}")
             workers.append(p)
-        
+
          # Set main process (training) affinity
         try:
             main_process = psutil.Process(os.getpid())
@@ -529,7 +529,7 @@ class Shobu_MCTS_RL:
             print(f"Training process pinned to cores {training_cores}")
         except Exception as e:
             print(f"Could not set affinity for training process: {e}")
-        
+
         try:
             # Run the training loop
             self.train_loop(model, sim_to_train_queue, lock)
@@ -538,7 +538,7 @@ class Shobu_MCTS_RL:
             for w in workers:
                 w.terminate()
                 w.join()
-    
+
 
 if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(True)
