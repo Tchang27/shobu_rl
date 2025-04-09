@@ -17,7 +17,7 @@ import psutil
 from shobu import ShobuMove, Shobu, Player
 import random
 
-MAX_GAME_LEN = 1024
+MAX_GAME_LEN = 256
 
 
 class MCNode:
@@ -413,7 +413,7 @@ class Shobu_MCTS_RL:
 
             ### optimize ###
             loss = value_loss + 2*policy_loss
-            opt.zero_grad()
+            opt.zero_grad(set_to_none=True)
             loss.backward()
             total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
             # prevent workers from loading weird state dicts
