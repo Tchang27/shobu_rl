@@ -151,10 +151,7 @@ class MCTree:
         cur_node.state = cur_state
 
         if (winner := cur_state.check_winner()) is not None:
-            if cur_node.player == winner:
-                evaluation = -1 # cuz board is flipped
-            else:
-                evaluation = 1
+            evaluation = -1 # we lost cuz parent won
         elif len(path_to_leaf) >= MAX_GAME_LEN:
             evaluation = 0
         else:
