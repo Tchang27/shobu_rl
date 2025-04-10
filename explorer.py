@@ -30,8 +30,12 @@ or "help" to view the help menu.
 # A collection of interesting positions for testing tree search, model eval, etc
 
 STARTING = Shobu.starting_position() # The default starting position
-BLACK_MATE_IN_1  = ...               # Black can play b2f6NE2 and win
-BLACK_MATED_IN_1 = ...               # Black must play b3f1E2 to avoid losing
+BLACK_MATE_IN_1       = ...          # Black can play b2f6NE2 and win
+BLACK_MATED_IN_1      = ...          # Black must play b3f1E2 to avoid losing
+MATERIAL_ADVANTAGE    = ...          # Black has a large material advantage, but no immediate win
+MATERIAL_DISADVANTAGE = ...          # Black has a large material disadvantage, but no immediate loss
+CENTRALIZATION        = ...          # Equal material, but black's pieces are centralized and more mobile
+MARGINALIZATION       = ...          # Equal material, but pieces are on edge, easier to be pushed off
 
 CUSTOM = Shobu.from_str(             # Just make sure the position is legal
 	"""
@@ -276,7 +280,7 @@ if True:
 
 	BLACK_MATED_IN_1 = Shobu.from_str(
 		"""
-		wwww ww..
+		ww.. wwww
 		.... .w..
 		.... ....
 		bbbb bbbb
@@ -285,6 +289,58 @@ if True:
 		.b.. ....
 		..b. .w..
 		wwww .b..
+		""", next_mover=Player.BLACK)
+
+	MATERIAL_ADVANTAGE = Shobu.from_str(
+		"""
+		w... w...
+		.... ....
+		.... ....
+		bbbb bbbb
+
+		w... w...
+		.... ....
+		.... ....
+		bbbb bbbb
+		""", next_mover=Player.BLACK)
+
+	MATERIAL_DISADVANTAGE = Shobu.from_str(
+		"""
+		wwww wwww
+		.... ....
+		.... ....
+		b... b...
+
+		wwww wwww
+		.... ....
+		.... ....
+		b... b...
+		""", next_mover=Player.BLACK)
+
+	CENTRALIZATION = Shobu.from_str(
+		"""
+		..w. ..w.
+		.... ....
+		.b.. .b..
+		.... ....
+
+		.... ....
+		.... ....
+		.b.. ..b.
+		...w w...
+		""", next_mover=Player.BLACK)
+
+	MARGINALIZATION = Shobu.from_str(
+		"""
+		..b. ..b.
+		.... ....
+		.w.. .w..
+		.... ....
+
+		.... ....
+		.... ....
+		.w.. ..w.
+		...b b...
 		""", next_mover=Player.BLACK)
 
 if __name__ == "__main__":
