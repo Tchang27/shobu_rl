@@ -280,7 +280,7 @@ if True:
 
 	BLACK_MATED_IN_1 = Shobu.from_str(
 		"""
-		ww.. wwww
+		ww.. ww..
 		.... .w..
 		.... ....
 		bbbb bbbb
@@ -289,6 +289,19 @@ if True:
 		.b.. ....
 		..b. .w..
 		wwww .b..
+		""", next_mover=Player.BLACK)
+	
+	TEST = Shobu.from_str(
+		"""
+		...w ....
+		.... ....
+		.... ...w
+		b... b...
+
+		..b. ww..
+		.b.. ....
+		w... b...
+		b..w .b.w
 		""", next_mover=Player.BLACK)
 
 	MATERIAL_ADVANTAGE = Shobu.from_str(

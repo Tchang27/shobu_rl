@@ -26,7 +26,6 @@ class KataGoGlobalPooling(nn.Module):
     def forward(self, x):
         # x: [batch, channels, H, W]
         B, C, H, W = x.shape
-        board_size = H
         
         #Mean per channel
         mean = x.mean(dim=[2, 3])

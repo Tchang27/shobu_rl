@@ -95,7 +95,8 @@ class MCTSAgent(Agent):
 		self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
 		self.model.eval()
 
-	def move(self, board: Shobu):
+	def move(self, board: Shobu, half_ply: int):
+		torch.set_num_threads(1)
 		with torch.no_grad():
 			# check if we need to flip board
 			was_moved = False
@@ -104,7 +105,10 @@ class MCTSAgent(Agent):
 				was_moved = True
 			mcts = MCTree(self.model, board, self.device)
 			rollout = mcts.search(800, noise=False)
-			move = rollout.sample_move(0.2)
+			if half_ply < 4:
+				move = rollout.sample_move(3)
+			else:
+				move = rollout.sample_move(0)
 			# check if we need to flip board and move
 			if was_moved:
 				board.flip()

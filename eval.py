@@ -49,12 +49,12 @@ def play_game(
 			if type(black_player) is RLAgent: 
 				move = black_player.move(board, board_reps)
 			else:
-				move = black_player.move(board)
+				move = black_player.move(board, half_ply)
 		else:
 			if type(white_player) is RLAgent: 
 				move = white_player.move(board, board_reps)
 			else:
-				move = white_player.move(board)
+				move = white_player.move(board, half_ply)
 		board = board.apply(move)
 		half_ply += 1
 

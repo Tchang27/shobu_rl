@@ -1,5 +1,5 @@
 from agent import UserAgent, RandomAgent, RLAgent, MCTSAgent
-from eval import round_robin, n_game_match
+from eval import round_robin, n_game_match, play_game
 
 
 if __name__ == '__main__':
@@ -11,10 +11,17 @@ if __name__ == '__main__':
 	# 	max_moves=100
 	# )
 
-	_, elos = round_robin(
-		[RandomAgent(),
-		MCTSAgent("model_weights/mcts_checkpoint_500.pth")], 
-		num_rounds=30,
-	)
+	# _, elos = round_robin(
+	# 	[RandomAgent(),
+	# 	MCTSAgent("model_weights/mcts_checkpoint_500.pth")], 
+	# 	num_rounds=30,
+	# )
 
-	print(elos)
+	# print(elos)
+    
+	play_game(
+		MCTSAgent("model_weights/mcts_checkpoint_6200.pth"), 
+		MCTSAgent("model_weights/mcts_checkpoint_200.pth"),
+		max_moves = 64,
+		print_info = True,
+		)
