@@ -20,8 +20,8 @@ if __name__ == '__main__':
 	# print(elos)
     
 	play_game(
-		MCTSAgent("model_weights/mcts_checkpoint_6200.pth"), 
-		MCTSAgent("model_weights/mcts_checkpoint_200.pth"),
+		MCTSAgent("model_weights/mcts_checkpoint_4300_v2.pth"), 
+		MCTSAgent("model_weights/mcts_checkpoint_4100.pth"),
 		max_moves = 64,
 		print_info = True,
 		)

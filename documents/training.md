@@ -36,7 +36,7 @@ Epochs 4200 - 6900
     - Fix: turn down exploration bonus
 
 ## `Exploration balance`
-Epochs 6900 - ?
+Epochs 6900 - 7800
 - Training from last checkpoint
 - Begin from starting position
 - Warmup: 25000 samples
@@ -49,7 +49,26 @@ Epochs 6900 - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
-    -
+    - Model move distribution still low
+    - Fix: try from initial run checkpoint, but with new temp scheduler
+
+
+## `Exploration balance pt 2`
+Epochs 4200v2 - ?
+- Training from checkpoint 4200
+- Begin from starting position
+- Warmup: 12000 samples
+- Max moves: 128 (64 per player)
+- LR: 2e-5
+- Temperature scheduling
+    - 3 until move 6
+    - 1 until move 10
+    - Linear decay to 0 by move 20
+- Exploration bonus coefficient: 1
+- Value loss weight: 1.5
+- Results
+    - Model move distribution still low
+    - Fix: try from initial run checkpoint, but with new temp scheduler
 
 # Future runs
 ## `Middlegame and Endgame`

@@ -17,7 +17,7 @@ import psutil
 from shobu import ShobuMove, Shobu, Player
 import random
 
-MAX_GAME_LEN = 256
+MAX_GAME_LEN = 128
 
 
 class MCNode:
@@ -187,12 +187,15 @@ def temperature_scheduler(epoch_no, move_no):
     this is just a straight up guess, can try something diff too
     but generally temperature should decrease over time
     """
-    if move_no < 30:
+    move_no = (move_no+1) // 2
+    if move_no < 3:
+        return 3
+    elif move_no < 5:
         return 1
-    elif move_no > 60:
+    elif move_no >= 10:
         return 0
     else:
-        return (60 - move_no) / 30
+        return (10 - move_no) / 5
 
 
 def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
@@ -276,10 +279,10 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
 
 #### MULTIPROC TRAINING+SIMUL ####
 MINIBATCH_SIZE = 256
-POOL_SIZE = 30
-TRAINER_SIZE = 1
+POOL_SIZE = 60
+TRAINER_SIZE = 2
 WINDOW_SIZE = 50000 # TODO tune this
-WARMUP = 5000
+WARMUP = 12000 #TODO tune this
 
 # worker process for simulating game
 def pickled_play_game(shared_model, buffer, lock, device, seed):
@@ -296,8 +299,7 @@ def pickled_play_game(shared_model, buffer, lock, device, seed):
     while True:
         try:
             with lock:
-                snapshot = shared_model.state_dict()
-                local_model.load_state_dict(snapshot)
+                local_model.load_state_dict(shared_model.state_dict())
             memory = ReplayMemory_MCTS()
             play_game(local_model, device, memory, episode)
             with lock:
@@ -360,7 +362,10 @@ class Shobu_MCTS_RL:
             with lock:
                 while buffer.qsize() > 0:
                     local_buffer.append(buffer.get())
-
+#             n_buffer = buffer.qsize()
+#             for _ in range(n_buffer):
+#                 local_buffer.append(buffer.get())
+            
             print(f"Rolling window size: {len(local_buffer)}")
             t0 = time.time()
             # Randomly sample a batch of items
@@ -404,12 +409,13 @@ class Shobu_MCTS_RL:
                 move_to_logit = get_joint_logits(board, po, logits=True)
                 policy = torch.stack([move_to_logit[k] for k in move_to_logit.keys()])
                 pi_dist = torch.tensor([pi_dict[k] for k in pi_dict.keys()], device=self.device, dtype=torch.float32)
+                # policy_losses.append(-torch.sum(pi_dist * F.log_softmax(policy, dim=-1), dim=1)) 
                 policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
                 i += 1
             policy_loss = torch.mean(torch.stack(policy_losses))
 
             ### optimize ###
-            loss = value_loss + 2*policy_loss
+            loss = 1.5*value_loss + policy_loss
             opt.zero_grad(set_to_none=True)
             loss.backward()
             total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
@@ -458,7 +464,7 @@ class Shobu_MCTS_RL:
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
-                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{epoch+3801}.pth')
+                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{4200+epoch+1}_v2.pth')
 
             # garbage collect
             gc.collect()
@@ -467,7 +473,7 @@ class Shobu_MCTS_RL:
             epoch += 1
 
         # save final model
-        torch.save(model.state_dict(), 'mcts_checkpoints_696/mcts_final.pth')
+        torch.save(model.state_dict(), 'mcts_checkpoints_696/mcts_final_v2.pth')
 
 
     # simultaneous simulation and training
@@ -499,7 +505,7 @@ class Shobu_MCTS_RL:
         model.to(self.device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
-        #model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{3800}.pth', map_location=self.device))
+        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{4200}.pth', map_location=self.device))
         # share model memory
         model.share_memory()
 
