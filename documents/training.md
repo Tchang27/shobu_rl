@@ -50,12 +50,29 @@ Epochs 6900 - 7800
 - Value loss weight: 1.5
 - Results
     - Model move distribution still low
-    - Fix: try from initial run checkpoint, but with new temp scheduler
+    - Fix: try from initial run checkpoint but with new temp scheduler (run below), or continue training (run also below)
 
 
 ## `Exploration balance pt 2`
 Epochs 4200v2 - ?
 - Training from checkpoint 4200
+- Begin from starting position
+- Warmup: 12000 samples
+- Max moves: 128 (64 per player)
+- LR: 2e-5
+- Temperature scheduling
+    - 3 until move 6
+    - 1 until move 10
+    - Linear decay to 0 by move 20
+- Exploration bonus coefficient: 1
+- Value loss weight: 1.5
+- Results
+    - Model move distribution still low
+    - Fix: try from initial run checkpoint, but with new temp scheduler
+
+## `Exploration balance pt 3`
+Epochs 7800 - ?
+- Training from last checkpoint from "Exploration balance"
 - Begin from starting position
 - Warmup: 12000 samples
 - Max moves: 128 (64 per player)

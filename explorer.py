@@ -280,8 +280,8 @@ if True:
 
 	BLACK_MATED_IN_1 = Shobu.from_str(
 		"""
-		ww.. ww..
-		.... .w..
+		w... ww..
+		.w.. .w..
 		.... ....
 		bbbb bbbb
 

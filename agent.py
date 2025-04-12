@@ -4,7 +4,7 @@ import time
 from shobu import Shobu, ShobuMove, Player
 from models import Shobu_PPO, Shobu_MCTS
 from rl_utils import model_action
-from mcts_sequential import MCTree
+from mcts_simul import MCTree
 import torch
 
 
@@ -19,7 +19,7 @@ class Agent(abc.ABC):
 	"""
 
 	@abc.abstractmethod
-	def move(self, board: Shobu) -> ShobuMove:
+	def move(self, board: Shobu, half_ply: int) -> ShobuMove:
 		"""
 		Given the current board state, decide the next move that you wish to play.
 		:param board: current board state
@@ -33,7 +33,7 @@ class RandomAgent(Agent):
 	plays it.
 	"""
 
-	def move(self, board: Shobu):
+	def move(self, board: Shobu, half_ply: int):
 		candidates = board.move_gen()
 		return random.choice(candidates)
 
@@ -45,7 +45,7 @@ class UserAgent(Agent):
 	before they are actually played.
 	"""
 
-	def move(self, board: Shobu):
+	def move(self, board: Shobu, half_ply: int):
 		while True:
 			input_str = input("Input your next move: ")
 			parsed = ShobuMove.from_str(input_str)
@@ -67,7 +67,7 @@ class RLAgent(Agent):
 		self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
 		self.model.eval()
 
-	def move(self, board: Shobu, board_reps: list):
+	def move(self, board: Shobu, half_ply: int, board_reps: list):
 		with torch.no_grad():
 			# check if we need to flip board
 			was_moved = False
@@ -105,8 +105,8 @@ class MCTSAgent(Agent):
 				was_moved = True
 			mcts = MCTree(self.model, board, self.device)
 			rollout = mcts.search(800, noise=False)
-			if half_ply < 4:
-				move = rollout.sample_move(3)
+			if half_ply < 6:
+				move = rollout.sample_move(2)
 			else:
 				move = rollout.sample_move(0)
 			# check if we need to flip board and move
