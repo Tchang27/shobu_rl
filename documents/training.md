@@ -43,7 +43,7 @@ Epochs 4200 - 6900
 Epochs 6900 - 8600
 - Training from last checkpoint
 - Begin from starting position
-- Warmup: 25000 samples
+- Warmup: 12000 samples
 - Max moves: 128 (64 per player)
 - LR: 2e-5
 - Temperature scheduling
@@ -59,7 +59,8 @@ Epochs 6900 - 8600
         - against 8300v2: 25-2-23
     - Model improved from `Intial`, even with `Start from sharper prior, learned value function`
     - Policy distribution still mostly flat
-    - Try curriculum learning: introduce random positions and play out from there
+    - Continue from other run; it can only barely find mate in 1 with the test case, and doesn't search 
+    into the checkmate position for the second candidate move
 
 ## `Start from sharper prior, learned value function`
 Epochs 4200v2 - 8300v2
@@ -88,8 +89,7 @@ Epochs 4200v2 - 8300v2
         - against 8600 (see above run): 23-2-25
     - Model is steadily improving, but plateauing in recent epochs
     - Even with `Start from noisy prior, learned value function`
-    - Try from other run; the smoother policy distribution could indicate more
-    flexible play/not fixated on one strategy
+    - Try curriculum learning: introduce random positions and play out from there
 
 ## Bug Fix
 - Positions where there are no valid moves is a loss for the current player
