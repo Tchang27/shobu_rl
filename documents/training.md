@@ -37,12 +37,10 @@ Epochs 4200 - 6900
 
 ## Major Bug Found
 - Found a major bug in eval.py, model learning better than expected
-- 4700v2 vs 3200: 37-4-9
-- 4700v2 vs 4200: 30-3-17
 - Will continue training the runs below
 
-## `Exploration balance`
-Epochs 6900 - ?
+## `Start from noisy prior, learned value function`
+Epochs 6900 - 8600
 - Training from last checkpoint
 - Begin from starting position
 - Warmup: 25000 samples
@@ -55,10 +53,15 @@ Epochs 6900 - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
-    - Model move distribution still low
-    - Fix: could try from initial run checkpoint but with new temp scheduler (see below)
+    - 8600
+        - against 3200: 46-0-4
+        - against 6200v2: 32-1-17
+        - against 8300v2: 25-2-23
+    - Model improved from `Intial`, even with `Start from sharper prior, learned value function`
+    - Policy distribution still mostly flat
+    - Try curriculum learning: introduce random positions and play out from there
 
-## `Exploration balance pt 2`
+## `Start from sharper prior, learned value function`
 Epochs 4200v2 - 8300v2
 - Training from checkpoint 4200
 - Begin from starting position
@@ -73,22 +76,28 @@ Epochs 4200v2 - 8300v2
 - Value loss weight: 1.5
 - Results
     - 4700v2
-        - beats 3200 37-4-9
-        - beats 4200 30-3-17
+        - against 3200: 37-4-9
+        - against 4200v2: 30-3-17
     - 6500v2
-        - beats 3200 43-2-5
-        - beats 4200 31-7-12
+        - against 3200: 43-2-5
+        - against 4200v2: 31-7-12
     - 8100v2
-        - beats 6200 30-4-16
-        - beats 7200 24-8-18
+        - against 6200v2: 30-4-16
+        - against 7200v2: 24-8-18
+    - 8300v2
+        - against 8600 (see above run): 23-2-25
+    - Model is steadily improving, but plateauing in recent epochs
+    - Even with `Start from noisy prior, learned value function`
+    - Try from other run; the smoother policy distribution could indicate more
+    flexible play/not fixated on one strategy
 
 ## Bug Fix
 - Positions where there are no valid moves is a loss for the current player
 - Check implemented for training and MCTS
 
-## `Middlegame and Endgame`
-Epochs 8300v2 - ?
-- Training from last checkpoint from `Exploration balance pt 2`
+## `Incorporating random positions in training`
+Epochs 8600 - ?
+- Training from last checkpoint from `Start from noisy prior, learned value function`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
     - To keep the model from forgetting opening board states
 - Warmup: 25000 samples
@@ -96,6 +105,23 @@ Epochs 8300v2 - ?
 - LR: 2e-5
 - Temperature scheduling
     - 0: play optimally from a random position
+    - or same temp scheduler as before
+- Exploration bonus coefficient: 1
+- Value loss weight: 1.5
+- Results
+    - 
+
+## `Continuing training from start positions`
+Epochs 8600 - ?
+- Training from last checkpoint from `Start from noisy prior, learned value function`
+- Begin from starting position
+- Warmup: 25000 samples
+- Max moves: 128 (64 per player)
+- LR: 2e-5
+- Temperature scheduling
+    - 3 until move 6
+    - 1 until move 10
+    - Linear decay to 0 by move 20
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
