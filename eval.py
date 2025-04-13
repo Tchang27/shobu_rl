@@ -36,7 +36,8 @@ def play_game(
 		if (winner := board.check_winner()) is not None:
 			if print_info: print(f"The winner is {winner}.")
 			return winner
-		
+		if len(board.move_gen()) == 0:
+			return Player(not board.next_mover.value)
 		# update board rep
 		if type(black_player) is RLAgent:
 			board_reps = get_board_representation(board, board_reps, torch.device('cpu'))

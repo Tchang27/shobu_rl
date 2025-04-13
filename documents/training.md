@@ -1,4 +1,4 @@
-# Thomas's Notes on Training Regime
+# Thomas's Notes on Training Regime Timeline
 
 ## `Intial`
 Epochs 0 - 4200
@@ -35,8 +35,14 @@ Epochs 4200 - 6900
     - Value function still understands material advantage; unlearned overfitting but not basic understanding
     - Fix: turn down exploration bonus
 
+## Major Bug Found
+- Found a major bug in eval.py, model learning better than expected
+- 4700v2 vs 3200: 37-4-9
+- 4700v2 vs 4200: 30-3-17
+- Will continue training the runs below
+
 ## `Exploration balance`
-Epochs 6900 - 7800
+Epochs 6900 - ?
 - Training from last checkpoint
 - Begin from starting position
 - Warmup: 25000 samples
@@ -50,8 +56,7 @@ Epochs 6900 - 7800
 - Value loss weight: 1.5
 - Results
     - Model move distribution still low
-    - Fix: try from initial run checkpoint but with new temp scheduler (run below), or continue training (run also below)
-
+    - Fix: could try from initial run checkpoint but with new temp scheduler (see below)
 
 ## `Exploration balance pt 2`
 Epochs 4200v2 - ?
@@ -67,25 +72,15 @@ Epochs 4200v2 - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
-    - Model move distribution still low
-    - Fix: try from initial run checkpoint, but with new temp scheduler
-
-## `Exploration balance pt 3`
-Epochs 7800 - ?
-- Training from last checkpoint from "Exploration balance"
-- Begin from starting position
-- Warmup: 12000 samples
-- Max moves: 128 (64 per player)
-- LR: 2e-5
-- Temperature scheduling
-    - 3 until move 6
-    - 1 until move 10
-    - Linear decay to 0 by move 20
-- Exploration bonus coefficient: 1
-- Value loss weight: 1.5
-- Results
-    - Model move distribution still low
-    - Fix: try from initial run checkpoint, but with new temp scheduler
+    - 4700v2
+        - beats 3200 37-4-9
+        - beats 4200 30-3-17
+    - 6500v2
+        - beats 3200 43-2-5
+        - beats 4200 31-7-12
+    - 8100v2
+        - beats 6200 30-4-16
+        - beats 7200 
 
 # Future runs
 ## `Middlegame and Endgame`

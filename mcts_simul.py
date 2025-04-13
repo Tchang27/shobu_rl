@@ -210,6 +210,11 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         ###
         # pr = cProfile.Profile()
         # pr.enable()
+        # check for no legal moves -> loss
+        if len(board.move_gen()) == 0:
+            game_end_reward = -1
+            break
+
         mcts = MCTree(model, board, device)
         # playout randomization
         full_search = False
