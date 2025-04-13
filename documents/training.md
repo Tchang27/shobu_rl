@@ -59,7 +59,7 @@ Epochs 6900 - ?
     - Fix: could try from initial run checkpoint but with new temp scheduler (see below)
 
 ## `Exploration balance pt 2`
-Epochs 4200v2 - ?
+Epochs 4200v2 - 8300v2
 - Training from checkpoint 4200
 - Begin from starting position
 - Warmup: 12000 samples
@@ -80,14 +80,17 @@ Epochs 4200v2 - ?
         - beats 4200 31-7-12
     - 8100v2
         - beats 6200 30-4-16
-        - beats 7200 
+        - beats 7200 24-8-18
 
-# Future runs
+## Bug Fix
+- Positions where there are no valid moves is a loss for the current player
+- Check implemented for training and MCTS
+
 ## `Middlegame and Endgame`
-Epochs ? - ?
-- Training from last checkpoint
+Epochs 8300v2 - ?
+- Training from last checkpoint from `Exploration balance pt 2`
 - Begin from random position
-- Warmup: 40000 samples
+- Warmup: 25000 samples
 - Max moves: 128 (64 per player)
 - LR: 2e-5
 - Temperature scheduling
@@ -99,6 +102,7 @@ Epochs ? - ?
 - Results
     - 
 
+# Future runs
 ## `Increased learning rate`
 Epochs ? - ?
 - Training from last checkpoint
