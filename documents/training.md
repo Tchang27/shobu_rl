@@ -89,15 +89,14 @@ Epochs 4200v2 - 8300v2
 ## `Middlegame and Endgame`
 Epochs 8300v2 - ?
 - Training from last checkpoint from `Exploration balance pt 2`
-- Begin from random position
+- 0.5 probability to start from random position, 0.5 probability to start from starting position
+    - To keep the model from forgetting opening board states
 - Warmup: 25000 samples
 - Max moves: 128 (64 per player)
 - LR: 2e-5
 - Temperature scheduling
-    - 3 until move 6
-    - 1 until move 10
-    - Linear decay to 0 by move 20
-- Exploration bonus coefficient: 1.5
+    - 0: play optimally from a random position
+- Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
     - 
@@ -114,7 +113,7 @@ Epochs ? - ?
     - 3 until move 6
     - 1 until move 10
     - Linear decay to 0 by move 20
-- Exploration bonus coefficient: 1.5
+- Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
     - 

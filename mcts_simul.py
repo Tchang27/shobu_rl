@@ -157,7 +157,6 @@ class MCTree:
         elif len(path_to_leaf) >= MAX_GAME_LEN:
             evaluation = 0
         else:
-            # get past 8 board states.
             evaluation, move_to_probability = self._value_and_policy(path_to_leaf, noise)
             cur_node.value = evaluation
             cur_node.expansion(move_to_probability)
@@ -201,7 +200,13 @@ def temperature_scheduler(epoch_no, move_no):
 
 
 def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
-    board = Shobu.starting_position()
+    # chance to start from random position
+    start_from_random = False
+    if np.random.random() < START_POS_PROB:
+        board = Shobu.starting_position()
+    else:
+        board = generate_board()
+        start_from_random = True
     generated_training_data = []
     num_moves = 0
     game_end_reward = None
@@ -214,7 +219,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         # pr.enable()
         # check for no legal moves -> loss
         if len(board.move_gen()) == 0:
-            game_end_reward = 1 # cuz last transition recorded was prev player who made a move
+            game_end_reward = 1 # cuz last transition was prev player who made a move
             break
         
         mcts = MCTree(model, board, device)
@@ -236,7 +241,10 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         generated_training_data.append((board, pi, full_search))
 
         # choose the next move based on tree search results
-        tau = temperature_scheduler(epoch, num_moves)
+        if start_from_random:
+            tau = 0 
+        else:
+            tau = temperature_scheduler(epoch, num_moves)
         selected_move = rollout.sample_move(tau)
         board = board.apply(selected_move)
 
@@ -290,6 +298,7 @@ POOL_SIZE = 60
 TRAINER_SIZE = 2
 WINDOW_SIZE = 50000 # TODO tune this
 WARMUP = 25000 #TODO tune this
+START_POS_PROB = 1.0
 
 # worker process for simulating game
 def pickled_play_game(shared_model, buffer, lock, device, seed):
@@ -369,9 +378,6 @@ class Shobu_MCTS_RL:
             with lock:
                 while buffer.qsize() > 0:
                     local_buffer.append(buffer.get())
-#             n_buffer = buffer.qsize()
-#             for _ in range(n_buffer):
-#                 local_buffer.append(buffer.get())
             
             print(f"Rolling window size: {len(local_buffer)}")
             t0 = time.time()
@@ -471,7 +477,8 @@ class Shobu_MCTS_RL:
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
-                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{epoch+1}_v2.pth')
+                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{8300+epoch+1}_v2.pth')
+                
 
             # garbage collect
             gc.collect()
@@ -512,7 +519,7 @@ class Shobu_MCTS_RL:
         model.to(self.device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
-        #model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{4900}_v2.pth', map_location=self.device))
+        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{8300}_v2.pth', map_location=self.device))
         # share model memory
         model.share_memory()
 
