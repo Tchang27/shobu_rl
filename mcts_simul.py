@@ -152,6 +152,8 @@ class MCTree:
 
         if (winner := cur_state.check_winner()) is not None:
             evaluation = -1 # we lost cuz parent won
+        elif len(cur_state.move_gen()) == 0:
+            evaluation = -1 # we lost cuz no more valid moves
         elif len(path_to_leaf) >= MAX_GAME_LEN:
             evaluation = 0
         else:
@@ -187,7 +189,7 @@ def temperature_scheduler(epoch_no, move_no):
     this is just a straight up guess, can try something diff too
     but generally temperature should decrease over time
     """
-    move_no = (move_no+1) // 2
+    move_no = (move_no) // 2
     if move_no < 3:
         return 3
     elif move_no < 5:
@@ -214,7 +216,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         if len(board.move_gen()) == 0:
             game_end_reward = -1
             break
-
+        
         mcts = MCTree(model, board, device)
         # playout randomization
         full_search = False
@@ -287,7 +289,7 @@ MINIBATCH_SIZE = 256
 POOL_SIZE = 60
 TRAINER_SIZE = 2
 WINDOW_SIZE = 50000 # TODO tune this
-WARMUP = 12000 #TODO tune this
+WARMUP = 25000 #TODO tune this
 
 # worker process for simulating game
 def pickled_play_game(shared_model, buffer, lock, device, seed):
@@ -469,7 +471,7 @@ class Shobu_MCTS_RL:
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
-                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{4200+epoch+1}_v2.pth')
+                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{epoch+1}_v2.pth')
 
             # garbage collect
             gc.collect()
@@ -510,7 +512,7 @@ class Shobu_MCTS_RL:
         model.to(self.device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
-        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{4200}.pth', map_location=self.device))
+        #model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{4900}_v2.pth', map_location=self.device))
         # share model memory
         model.share_memory()
 
