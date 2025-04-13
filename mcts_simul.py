@@ -214,7 +214,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         # pr.enable()
         # check for no legal moves -> loss
         if len(board.move_gen()) == 0:
-            game_end_reward = -1
+            game_end_reward = 1 # cuz last transition recorded was prev player who made a move
             break
         
         mcts = MCTree(model, board, device)
