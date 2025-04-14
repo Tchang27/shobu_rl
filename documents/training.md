@@ -13,6 +13,7 @@ Epochs 0 - 4200
 - Exploration bonus coefficient: 1.5
 - Value loss weight: 1.5
 - Results
+    - Value function knows material differences
     - Some overfitting observed empirically, model plays very similarly each game
     - To mitigate this: increase exploration during trainig
 
@@ -113,7 +114,20 @@ Epochs 8600 - ?
 - Value loss weight: 1.5
 - Results
     - 13200_random
+        - against 8300v2: 29-4-17, with 18-0-7 as black and 11-4-10 as white
         - against 8600: 26-8-16, with 15-5-5 as black and 11-3-11 as white
+        - against 12200_random: 27-5-18, with 16-3-6 as black and 11-2-12 as white
+    - 13800_random
+        - against 8600: 24-7-19, with 16-4-5 as black and 8-3-14 as white
+        - against 13000_random: 30-6-15, with 22-0-3 as black and 8-6-11 as white
+    - 14600_random
+        - against 8600: 22-6-22, with 12-3-10 as black and 10-3-12 as white
+        - against 13400_random: 18-7-25, with 13-3-9 as black and 5-4-16 as white
+    - 15400_random
+        - against 8600: 20-12-18, with 12-7-6 as black and 8-5-12 as white
+        - against 13800_random: 22-4-24, with 14-1-10 as black and 8-3-14 as white
+    - ?_random
+        - against ?_start: 
 
 ## `Continuing training from start positions`
 Epochs 8600 - ?
@@ -129,14 +143,30 @@ Epochs 8600 - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
-    - 
+    - ?_start
+        - against ?_random:
 
 # Future runs
-## `Increased learning rate`
+## `Increased learning rate, random positions`
+Epochs ? - ?
+- Training from last checkpoint
+- 0.5 probability to start from random position, 0.5 probability to start from starting position
+- Warmup: 25000 samples
+- Max moves: 128 (64 per player)
+- LR: 6e-5
+- Temperature scheduling
+    - 0: play optimally from a random position
+    - or same temp scheduler as before
+- Exploration bonus coefficient: 1
+- Value loss weight: 1.5
+- Results
+    - 
+
+## `Increased learning rate, starting position`
 Epochs ? - ?
 - Training from last checkpoint
 - Begin from starting position
-- Warmup: 40000 samples
+- Warmup: 25000 samples
 - Max moves: 128 (64 per player)
 - LR: 6e-5
 - Temperature scheduling
