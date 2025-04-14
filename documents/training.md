@@ -58,9 +58,9 @@ Epochs 6900 - 8600
         - against 6200v2: 32-1-17
         - against 8300v2: 25-2-23
     - Model improved from `Intial`, even with `Start from sharper prior, learned value function`
-    - Policy distribution still mostly flat
-    - Continue from other run; it can only barely find mate in 1 with the test case, and doesn't search 
-    into the checkmate position for the second candidate move
+    - Policy distribution still mostly flat but competitive with sharper prior;
+    could indicate that the prior doesn't need to be very sharp, just good enough
+    - Try curriculum learning: introduce random positions and play out from there
 
 ## `Start from sharper prior, learned value function`
 Epochs 4200v2 - 8300v2
@@ -88,12 +88,15 @@ Epochs 4200v2 - 8300v2
     - 8300v2
         - against 8600 (see above run): 23-2-25
     - Model is steadily improving, but plateauing in recent epochs
-    - Even with `Start from noisy prior, learned value function`
-    - Try curriculum learning: introduce random positions and play out from there
+    - Mostly even with `Start from noisy prior, learned value function`
+        - Lost more positions as white, won less positions as black
+    - These checkpoints are deprecated due to compute/time constraints:
+    given that the other training run `Start from noisy prior, learned value function`
+    had slightly better performance, we opted to continue training from that checkpoint
 
 ## Bug Fix
 - Positions where there are no valid moves is a loss for the current player
-- Check implemented for training and MCTS
+- Check implemented for remainder of training
 
 ## `Incorporating random positions in training`
 Epochs 8600 - ?
@@ -109,7 +112,8 @@ Epochs 8600 - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
-    - 
+    - 13200_random
+        - against 8600: 26-8-16, with 15-5-5 as black and 11-3-11 as white
 
 ## `Continuing training from start positions`
 Epochs 8600 - ?

@@ -25,8 +25,8 @@ if __name__ == '__main__':
 	# print(elos)
     
 	play_game(
+		MCTSAgent("model_weights/mcts_checkpoint_13200_noisy_random.pth"),
 		MCTSAgent("model_weights/mcts_checkpoint_8600_noisy.pth"),
-		MCTSAgent("model_weights/mcts_checkpoint_8300_v2.pth"),
 		#UserAgent(),
 		max_moves = 32,
 		print_info = True,
