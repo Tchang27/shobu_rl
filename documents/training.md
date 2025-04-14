@@ -100,7 +100,7 @@ Epochs 4200v2 - 8300v2
 - Check implemented for remainder of training
 
 ## `Incorporating random positions in training`
-Epochs 8600 - ?
+Epochs 8600 - 15600_random
 - Training from last checkpoint from `Start from noisy prior, learned value function`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
     - To keep the model from forgetting opening board states
@@ -126,8 +126,11 @@ Epochs 8600 - ?
     - 15400_random
         - against 8600: 20-12-18, with 12-7-6 as black and 8-5-12 as white
         - against 13800_random: 22-4-24, with 14-1-10 as black and 8-3-14 as white
-    - ?_random
-        - against ?_start: 
+    - 15600_random
+        - against 12400_start: 22-9-19, with 15-5-5 as black and 7-4-14 as white
+    - Having random positions interspersed actually leads to more train steps 
+    because of less locking overlap and more game results for the value network
+    - improvement is plateauing, we should increase the learning rate for this regime
 
 ## `Continuing training from start positions`
 Epochs 8600 - ?
@@ -143,13 +146,27 @@ Epochs 8600 - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
+    - 10400_start
+        - against 8600: 27-6-17, with 16-5-4 as black and 11-1-13 as white
+    - 11400_start
+        - against 8600: 25-7-18, with 16-4-5 as black and 9-3-13 as white
+        - against 10400_start: 23-2-25 with 16-1-8 as black and 7-1-17 as white
+    - 12400_start
+        - against 8600: 28-7-15, with 19-2-4 as black an 9-5-11 as white
+        - against 10400_start: 27-6-17, with 16-2-7 as black and 11-4-10 as white
+        - against 12400_random: 25-8-17, with 14-3-8 as black and 11-5-9 as white
+        - against 15600_random: 19-9-22, with 14-4-7 as black and 5-5-15 as white
+    - for the same number of epochs, it performs better than the model trained on
+    random positions, but that could be due to the random position task being 
+    harder and thus requiring more epochs
+    - the model still seems to be improving, keeping learning rate same for now
     - ?_start
-        - against ?_random:
+        - against ?_start
+        - against ?_random
 
-# Future runs
 ## `Increased learning rate, random positions`
-Epochs ? - ?
-- Training from last checkpoint
+Epochs 15600_random - ?
+- Training from last checkpoint from `Incorporating random positions in training`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
 - Warmup: 25000 samples
 - Max moves: 128 (64 per player)
@@ -160,11 +177,16 @@ Epochs ? - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
-    - 
+    - 16400_random:
+        - against 8600: 24-8-18, with 17-3-5 as black and 7-5-13 as white
+        - against 13800_random: 23-5-22, with 17-2-6 as black and 6-3-16 as white
+        - against 15600_random: 25-7-18, with 14-5-6 as black and 11-2-12 as white
 
+
+# Future runs
 ## `Increased learning rate, starting position`
 Epochs ? - ?
-- Training from last checkpoint
+- Training from last checkpoint from `Continuing training from start positions`
 - Begin from starting position
 - Warmup: 25000 samples
 - Max moves: 128 (64 per player)
