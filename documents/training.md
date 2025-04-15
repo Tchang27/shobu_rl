@@ -160,9 +160,16 @@ Epochs 8600 - ?
     random positions, but that could be due to the random position task being 
     harder and thus requiring more epochs
     - the model still seems to be improving, keeping learning rate same for now
-    - ?_start
-        - against ?_start
-        - against ?_random
+    - 13300_start
+        - against 12400_start: 53-7-40, with 34-1-15 as black and 19-6-25 as white
+        - against 15600_random: 41-17-42, with 27-7-16 as black and 14-10-26 as white
+    - 14300_start
+        - against 12400_start: 45-16-39, with 31-3-16 as black and 14-13-23 as white
+        - against 15600_random: 48-9-43, with 26-6-18 as black and 22-3-25 as white
+    - 15300_start
+        - against 12400_start: 54-6-40, with 31-3-16 as black and 23-3-24 as white
+        - against 15600_random: 48-3-49, with 31-1-18 as black and 17-2-31 as white
+        - against 21100_random: 44-3-53, with 28-1-21 as black and 16-2-32 as white
 
 ## `Increased learning rate, random positions`
 Epochs 15600_random - ?
@@ -187,6 +194,14 @@ Epochs 15600_random - ?
     - 20500_random
         - against 12400_start: 57-4-39, with 38-1-11 as black and 19-3-28 as white
         - against 18600_random: 63-7-30, with 35-3-12 as black and 28-4-18 as white
+    - 21100_random
+        - against 15600_random: 54-13-33, with 35-4-11 as black and 19-9-22 as white
+        - against 18600_random: 50-15-35, with 34-4-12 as black and 16-11-23 as white
+        - against 15300_start: 53-3-44, with 32-2-16 as black and 21-1-28 as white
+    - 21500_random
+        - against 21100_random: 43-17-40, with 29-6-15 as black and 14-11-25 as white
+        - against 15300_start: 
+
 
 
 # Future runs
