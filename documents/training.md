@@ -200,7 +200,7 @@ Epochs 15600_random - ?
         - against 15300_start: 53-3-44, with 32-2-16 as black and 21-1-28 as white
     - 21500_random
         - against 21100_random: 43-17-40, with 29-6-15 as black and 14-11-25 as white
-        - against 15300_start: 
+        - against 15300_start: 53-7-40, with 33-2-15 as black and 20-5-25 as white
 
 
 
