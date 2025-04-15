@@ -181,6 +181,9 @@ Epochs 15600_random - ?
         - against 8600: 24-8-18, with 17-3-5 as black and 7-5-13 as white
         - against 13800_random: 23-5-22, with 17-2-6 as black and 6-3-16 as white
         - against 15600_random: 25-7-18, with 14-5-6 as black and 11-2-12 as white
+    - 18600_random
+        - against 12400_start: 50-11-39, with 32-5-13 as black and 18-6-26 as white
+        - against 16800_random: 50-8-42, with 33-7-10 as black and 17-1-32 as white
 
 
 # Future runs

@@ -5,8 +5,8 @@ from eval import round_robin, n_game_match, play_game
 if __name__ == '__main__':
 	# Hopefully our players will be more interesting than this :)
 	# res = n_game_match(
-	# 	MCTSAgent("model_weights/mcts_checkpoint_8300_v2.pth"), 
-	# 	MCTSAgent("model_weights/mcts_checkpoint_6500_v2.pth"),
+	# 	MCTSAgent("model_weights/mcts_checkpoint_17700_noisy_random.pth"), 
+	# 	MCTSAgent("model_weights/mcts_checkpoint_12400_start.pth"),
 	# 	#RandomAgent(), 
 	# 	n=50,
 	# 	max_moves=32
@@ -25,8 +25,8 @@ if __name__ == '__main__':
 	# print(elos)
     
 	play_game(
-		MCTSAgent("model_weights/mcts_checkpoint_16700_noisy_random.pth"),
-		MCTSAgent("model_weights/mcts_checkpoint_16400_noisy_random.pth"),
+		MCTSAgent("model_weights/mcts_checkpoint_18600_noisy_random.pth"),
+		MCTSAgent("model_weights/mcts_checkpoint_12400_start.pth"),
 		#UserAgent(),
 		max_moves = 32,
 		print_info = True,
