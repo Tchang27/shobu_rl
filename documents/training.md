@@ -133,7 +133,7 @@ Epochs 8600 - 15600_random
     - improvement is plateauing, we should increase the learning rate for this regime
 
 ## `Continuing training from start positions`
-Epochs 8600 - ?
+Epochs 8600 - 15300_start
 - Training from last checkpoint from `Start from noisy prior, learned value function`
 - Begin from starting position
 - Warmup: 25000 samples
@@ -172,7 +172,7 @@ Epochs 8600 - ?
         - against 21100_random: 44-3-53, with 28-1-21 as black and 16-2-32 as white
 
 ## `Increased learning rate, random positions`
-Epochs 15600_random - ?
+Epochs 15600_random - 23700_random
 - Training from last checkpoint from `Incorporating random positions in training`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
 - Warmup: 25000 samples
@@ -201,12 +201,13 @@ Epochs 15600_random - ?
     - 21500_random
         - against 21100_random: 43-17-40, with 29-6-15 as black and 14-11-25 as white
         - against 15300_start: 53-7-40, with 33-2-15 as black and 20-5-25 as white
+    - 23600_random
+        - against 20500_random: 42-10-48, with 24-4-22 as black and 18-6-26 as white
+        - against 15300_start: 54-7-39, with 34-5-11 as black and 20-2-28 as white
+    - model finally plateauing -> try increase search depth
 
-
-
-# Future runs
 ## `Increased learning rate, starting position`
-Epochs ? - ?
+Epochs 15300_start - ?
 - Training from last checkpoint from `Continuing training from start positions`
 - Begin from starting position
 - Warmup: 25000 samples
@@ -220,3 +221,21 @@ Epochs ? - ?
 - Value loss weight: 1.5
 - Results
     - 
+
+## `Increased playout cap, random positions`
+Epochs 23700_random - ?
+- Training from last checkpoint from `Increased learning rate, random positions`
+- 0.5 probability to start from random position, 0.5 probability to start from starting position
+- Warmup: 40000 samples (avoid overfitting)
+- Max moves: 128 (64 per player)
+- LR: 6e-5
+- Playout cap: 800
+- Temperature scheduling
+    - play optimally from a random position
+    - from start:
+        - 3 until move 6
+        - 1 until move 10
+        - Linear decay to 0 by move 20
+- Exploration bonus coefficient: 1
+- Value loss weight: 1.5
+- Results
