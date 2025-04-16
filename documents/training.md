@@ -239,3 +239,13 @@ Epochs 23700_random - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
+    - 25800_random
+        - against 21600_random: 57-6-37, with 36-2-12 as black and 21-4-25 as white
+        - against 23600_random: 55-7-38, with 35-1-14 as black and 20-6-24 as white
+        - against 15300_start: 50-9-41, with 26-5-19 as black and 24-4-22 as white
+    - 26100_random:
+        - against 23600_random: 53-15-32, with 31-9-10 as black and 22-6-22 as white
+        - against 15300_start: 58-8-34, with 34-3-13 as black and 24-5-21 as white
+    - 27700_random:
+        - against 26100_random: 52-14-34, with 33-4-13 as black and 19-10-21 as white
+        - against 15300_start: 62-13-25, with 35-7-8 as black and 27-6-17 as white
