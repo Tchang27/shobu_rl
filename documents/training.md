@@ -223,7 +223,7 @@ Epochs 15300_start - ?
     - 
 
 ## `Increased playout cap, random positions`
-Epochs 23700_random - ?
+Epochs 23700_random - 31500_random
 - Training from last checkpoint from `Increased learning rate, random positions`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
 - Warmup: 40000 samples (avoid overfitting)
@@ -249,3 +249,51 @@ Epochs 23700_random - ?
     - 27700_random:
         - against 26100_random: 52-14-34, with 33-4-13 as black and 19-10-21 as white
         - against 15300_start: 62-13-25, with 35-7-8 as black and 27-6-17 as white
+    - 31200_random:
+        - against 27700_random: 59-11-30, with 34-6-10 as black and 25-5-20 as white
+        - against 15300_start: 66-5-29, with 35-3-12 as black and 31-2-17 as white
+    - severe overfitting on opening move, restarting with inf temperature for first three moves
+
+## `Increase temp, random positions`
+Epochs 31500_random - ?
+- Training from last checkpoint from `Increased playout cap, random positions`
+- 0.5 probability to start from random position, 0.5 probability to start from starting position
+- Warmup: 40000 samples (avoid overfitting)
+- Max moves: 128 (64 per player)
+- LR: 6e-5
+- Playout cap: 800
+- Temperature scheduling
+    - play optimally from a random position
+    - from start:
+        - inf on first move
+        - 3 until move 6
+        - 1 until move 10
+        - Linear decay to 0 by move 20
+- Exploration bonus coefficient: 1
+- Value loss weight: 1.5
+- Results
+    - 
+
+## `Exploration +0.1 on prior, random positions`
+Epochs 31600_explore - ?
+- Training from warm annealed restart of 
+- 0.5 probability to start from random position, 0.5 probability to start from starting position
+- Warmup: 40000 samples (avoid overfitting)
+- Max moves: 128 (64 per player)
+- LR: 6e-5
+- Playout cap: 800
+- Temperature scheduling
+    - play optimally from a random position
+    - from start:
+        - inf on first move
+        - 3 until move 6
+        - 1 until move 10
+        - Linear decay to 0 by move 20
+- +0.1 on prior before selection term
+- Exploration bonus coefficient: 1
+- Value loss weight: 1.5
+- Results
+    - smoothed out priors from beginning
+    - 31600_explore
+        - against 31500_random: 
+

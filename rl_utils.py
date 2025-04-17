@@ -129,7 +129,7 @@ def generate_subboard():
 
 def generate_board() -> Shobu:
     # select next mover
-    next_mover = random.choice([Player.BLACK, Player.WHITE])
+    next_mover = Player.BLACK
     # generate board
     top_right = generate_subboard()
     top_left = generate_subboard()

@@ -189,7 +189,9 @@ def temperature_scheduler(epoch_no, move_no):
     but generally temperature should decrease over time
     """
     move_no = (move_no) // 2
-    if move_no < 3:
+    if move_no < 1:
+        return float('inf')
+    elif move_no < 3:
         return 3
     elif move_no < 5:
         return 1
@@ -228,7 +230,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         if np.random.random() < 0.75:
             rollout = mcts.search(100, noise=False)
         else:
-            rollout = mcts.search(400, noise=True)
+            rollout = mcts.search(800, noise=True)
             full_search = True
         del mcts
         _sum_pi = sum([child.num_visits for child in rollout.children.values()])

@@ -105,8 +105,8 @@ class MCTSAgent(Agent):
 				was_moved = True
 			mcts = MCTree(self.model, board, self.device)
 			rollout = mcts.search(800, noise=False)
-			if half_ply < 6:
-				move = rollout.sample_move(5)
+			if half_ply < 2:
+				move = rollout.sample_move(float("inf"))
 			else:
 				move = rollout.sample_move(0)
 			# check if we need to flip board and move
