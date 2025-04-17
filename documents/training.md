@@ -133,7 +133,7 @@ Epochs 8600 - 15600_random
     - improvement is plateauing, we should increase the learning rate for this regime
 
 ## `Continuing training from start positions`
-Epochs 8600 - ?
+Epochs 8600 - 15300_start
 - Training from last checkpoint from `Start from noisy prior, learned value function`
 - Begin from starting position
 - Warmup: 25000 samples
@@ -160,12 +160,19 @@ Epochs 8600 - ?
     random positions, but that could be due to the random position task being 
     harder and thus requiring more epochs
     - the model still seems to be improving, keeping learning rate same for now
-    - ?_start
-        - against ?_start
-        - against ?_random
+    - 13300_start
+        - against 12400_start: 53-7-40, with 34-1-15 as black and 19-6-25 as white
+        - against 15600_random: 41-17-42, with 27-7-16 as black and 14-10-26 as white
+    - 14300_start
+        - against 12400_start: 45-16-39, with 31-3-16 as black and 14-13-23 as white
+        - against 15600_random: 48-9-43, with 26-6-18 as black and 22-3-25 as white
+    - 15300_start
+        - against 12400_start: 54-6-40, with 31-3-16 as black and 23-3-24 as white
+        - against 15600_random: 48-3-49, with 31-1-18 as black and 17-2-31 as white
+        - against 21100_random: 44-3-53, with 28-1-21 as black and 16-2-32 as white
 
 ## `Increased learning rate, random positions`
-Epochs 15600_random - ?
+Epochs 15600_random - 23700_random
 - Training from last checkpoint from `Incorporating random positions in training`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
 - Warmup: 25000 samples
@@ -187,11 +194,20 @@ Epochs 15600_random - ?
     - 20500_random
         - against 12400_start: 57-4-39, with 38-1-11 as black and 19-3-28 as white
         - against 18600_random: 63-7-30, with 35-3-12 as black and 28-4-18 as white
+    - 21100_random
+        - against 15600_random: 54-13-33, with 35-4-11 as black and 19-9-22 as white
+        - against 18600_random: 50-15-35, with 34-4-12 as black and 16-11-23 as white
+        - against 15300_start: 53-3-44, with 32-2-16 as black and 21-1-28 as white
+    - 21500_random
+        - against 21100_random: 43-17-40, with 29-6-15 as black and 14-11-25 as white
+        - against 15300_start: 53-7-40, with 33-2-15 as black and 20-5-25 as white
+    - 23600_random
+        - against 20500_random: 42-10-48, with 24-4-22 as black and 18-6-26 as white
+        - against 15300_start: 54-7-39, with 34-5-11 as black and 20-2-28 as white
+    - model finally plateauing -> try increase search depth
 
-
-# Future runs
 ## `Increased learning rate, starting position`
-Epochs ? - ?
+Epochs 15300_start - ?
 - Training from last checkpoint from `Continuing training from start positions`
 - Begin from starting position
 - Warmup: 25000 samples
@@ -205,3 +221,31 @@ Epochs ? - ?
 - Value loss weight: 1.5
 - Results
     - 
+
+## `Increased playout cap, random positions`
+Epochs 23700_random - ?
+- Training from last checkpoint from `Increased learning rate, random positions`
+- 0.5 probability to start from random position, 0.5 probability to start from starting position
+- Warmup: 40000 samples (avoid overfitting)
+- Max moves: 128 (64 per player)
+- LR: 6e-5
+- Playout cap: 800
+- Temperature scheduling
+    - play optimally from a random position
+    - from start:
+        - 3 until move 6
+        - 1 until move 10
+        - Linear decay to 0 by move 20
+- Exploration bonus coefficient: 1
+- Value loss weight: 1.5
+- Results
+    - 25800_random
+        - against 21600_random: 57-6-37, with 36-2-12 as black and 21-4-25 as white
+        - against 23600_random: 55-7-38, with 35-1-14 as black and 20-6-24 as white
+        - against 15300_start: 50-9-41, with 26-5-19 as black and 24-4-22 as white
+    - 26100_random:
+        - against 23600_random: 53-15-32, with 31-9-10 as black and 22-6-22 as white
+        - against 15300_start: 58-8-34, with 34-3-13 as black and 24-5-21 as white
+    - 27700_random:
+        - against 26100_random: 52-14-34, with 33-4-13 as black and 19-10-21 as white
+        - against 15300_start: 62-13-25, with 35-7-8 as black and 27-6-17 as white

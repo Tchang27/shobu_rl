@@ -274,22 +274,23 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
     # has game reward 1. the reward for preceding board states thus alternates
     # between -1 and 1. This "label" of -1 or 1 will be used to train the
     # value net
-    generated_training_data_with_rewards = []
-    for board, pi, full_search in reversed(generated_training_data):
-        if full_search:
-            generated_training_data_with_rewards.append((board, pi, game_end_reward))
-        game_end_reward *= -1
+    if len(generated_training_data) > 0:
+        generated_training_data_with_rewards = []
+        for board, pi, full_search in reversed(generated_training_data):
+            if full_search:
+                generated_training_data_with_rewards.append((board, pi, game_end_reward))
+            game_end_reward *= -1
 
-    # Push entire game history into ReplayMemory
-    history = deque()
-    for board, pi, reward in generated_training_data_with_rewards:
-        history.append(board.as_matrix())
-        padded = [np.zeros((8,4,4)) for _ in range(HISTORY_SIZE-len(history))] + list(history)
-        state_tensor = torch.tensor(np.concatenate(padded), device=device, dtype=torch.float32).unsqueeze(0)
-        memory.push(board, state_tensor, reward, pi)
+        # Push entire game history into ReplayMemory
+        history = deque()
+        for board, pi, reward in generated_training_data_with_rewards:
+            history.append(board.as_matrix())
+            padded = [np.zeros((8,4,4)) for _ in range(HISTORY_SIZE-len(history))] + list(history)
+            state_tensor = torch.tensor(np.concatenate(padded), device=device, dtype=torch.float32).unsqueeze(0)
+            memory.push(board, state_tensor, reward, pi)
 
-        if len(history) >= HISTORY_SIZE:
-            history.popleft()
+            if len(history) >= HISTORY_SIZE:
+                history.popleft()
 
 
 #### MULTIPROC TRAINING+SIMUL ####
@@ -297,8 +298,8 @@ MINIBATCH_SIZE = 256
 POOL_SIZE = 60
 TRAINER_SIZE = 2
 WINDOW_SIZE = 50000 # TODO tune this
-WARMUP = 25000 #TODO tune this
-START_POS_PROB = 1.0
+WARMUP = 30000 #TODO tune this
+START_POS_PROB = 0.5
 
 # worker process for simulating game
 def pickled_play_game(shared_model, buffer, lock, device, seed):
@@ -318,9 +319,10 @@ def pickled_play_game(shared_model, buffer, lock, device, seed):
                 local_model.load_state_dict(shared_model.state_dict())
             memory = ReplayMemory_MCTS()
             play_game(local_model, device, memory, episode)
-            with lock:
-                for m in memory.memory:
-                    buffer.put(m)
+            if len(memory) > 0:
+                with lock:
+                    for m in memory.memory:
+                        buffer.put(m)
             del memory
             episode += 1
         except Exception as e:
@@ -359,9 +361,9 @@ class Shobu_MCTS_RL:
             if (not any(p is cp for cp in critic_params)) and (not any(p is bp for bp in backbone_params))
         ]  # All other params (policy heads)
         opt = torch.optim.Adam([
-            {'params': actor_params, 'lr': 2e-5},
-            {'params': backbone_params, 'lr': 2e-5},
-            {'params': critic_params, 'lr': 2e-5}
+            {'params': actor_params, 'lr': 6e-5},
+            {'params': backbone_params, 'lr': 6e-5},
+            {'params': critic_params, 'lr': 6e-5}
         ], amsgrad=True, weight_decay=3e-5)
 
         tot1 = time.time()
@@ -477,7 +479,7 @@ class Shobu_MCTS_RL:
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
-                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{8300+epoch+1}_v2.pth')
+                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{20600+epoch+1}_noisy_random.pth')
                 
 
             # garbage collect
@@ -519,7 +521,7 @@ class Shobu_MCTS_RL:
         model.to(self.device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
-        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{8300}_v2.pth', map_location=self.device))
+        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{20600}_noisy_random.pth', map_location=self.device))
         # share model memory
         model.share_memory()
 
