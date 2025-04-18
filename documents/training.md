@@ -295,7 +295,6 @@ Epochs 31600_explore - ?
         - 3 until move 6
         - 1 until move 10
         - Linear decay to 0 by move 20
-- +0.1 on prior before selection term
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
