@@ -2,10 +2,12 @@ import abc
 import random
 import time
 from shobu import Shobu, ShobuMove, Player
-from models import Shobu_PPO, Shobu_MCTS
+from models import Shobu_PPO, Shobu_MCTS, Shobu_MCTS_Conv
 from rl_utils import model_action
 from mcts_simul import MCTree
+from mcts_conv import MCTree_Conv
 import torch
+import copy
 
 
 class Agent(abc.ABC):
@@ -19,7 +21,7 @@ class Agent(abc.ABC):
 	"""
 
 	@abc.abstractmethod
-	def move(self, board: Shobu, half_ply: int) -> ShobuMove:
+	def move(self, board: Shobu) -> ShobuMove:
 		"""
 		Given the current board state, decide the next move that you wish to play.
 		:param board: current board state
@@ -45,7 +47,7 @@ class UserAgent(Agent):
 	before they are actually played.
 	"""
 
-	def move(self, board: Shobu, half_ply: int):
+	def move(self, board: Shobu):
 		while True:
 			input_str = input("Input your next move: ")
 			parsed = ShobuMove.from_str(input_str)
@@ -67,7 +69,8 @@ class RLAgent(Agent):
 		self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
 		self.model.eval()
 
-	def move(self, board: Shobu, half_ply: int, board_reps: list):
+	def move(self, board: Shobu, board_reps: list):
+		torch.set_num_threads(1)
 		with torch.no_grad():
 			# check if we need to flip board
 			was_moved = False
@@ -85,7 +88,7 @@ class RLAgent(Agent):
 
 class MCTSAgent(Agent):
 	"""
-	A `RLAgent` is a bot player which uses a trained PPO model
+	A `MCTSAgent` is a bot player which uses a trained MCTS model
 	to select moves.
 	"""
 	def __init__(self, checkpoint_path: str):
@@ -106,7 +109,40 @@ class MCTSAgent(Agent):
 			mcts = MCTree(self.model, board, self.device)
 			rollout = mcts.search(800, noise=False)
 			if half_ply < 2:
-				move = rollout.sample_move(float("inf"))
+				move = rollout.sample_move(float('inf'))
+			else:
+				move = rollout.sample_move(0)
+			# check if we need to flip board and move
+			if was_moved:
+				board.flip()
+				move.flip()
+		return move
+    
+    
+class MCTSConvAgent(Agent):
+	"""
+	A `MCTSConvAgent` is a bot player which uses a trained MCTS model
+	to select moves.
+	"""
+	def __init__(self, checkpoint_path: str):
+		self.device = torch.device("cpu")   
+		self.model = Shobu_MCTS_Conv(self.device)
+		self.model.to(self.device)
+		self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
+		self.model.eval()
+
+	def move(self, board: Shobu, half_ply: int):
+		torch.set_num_threads(1)
+		with torch.no_grad():
+			# check if we need to flip board
+			was_moved = False
+			if board.next_mover == Player.WHITE:
+				board.flip()
+				was_moved = True
+			mcts = MCTree_Conv(self.model, board, self.device)
+			rollout = mcts.search(800, noise=False)
+			if half_ply < 2:
+				move = rollout.sample_move(float('inf'))
 			else:
 				move = rollout.sample_move(0)
 			# check if we need to flip board and move

@@ -466,6 +466,46 @@ def get_joint_logits(board: Shobu, policy_output: dict, logits=False, noise=Fals
     return dict(zip(valid_shobu_moves, softmax_tensor))
 
 
+def get_joint_logits_fromconv(board: Shobu, policy_output: dict, logits=False, noise=False) -> dict:
+    '''
+    Return dict mapping valid Shobu moves to probabilities from the policy net
+
+    Inputs:
+    - board: current Shobu board
+    - policy_output: output from Shobu_MCTS
+
+    Outputs:
+    - softmax_dict: mapping of Shobu moves to tensor ofprobabilities
+    '''
+    plogits = policy_output["passive"].squeeze()
+    alogits = policy_output["aggressive"].squeeze()
+    valid_shobu_moves = board.move_gen()
+    valid_moves = [convert_to_PPOMove(move) for move in valid_shobu_moves]
+    pidx = [(px * 8 + py) * 16 + pd * 2 + (ps - 1) for (px, py, pd, ps), _ in valid_moves]
+    aidx = [(ax * 8 + ay) for _, (ax, ay) in valid_moves]
+
+    # Compute logits efficiently using tensor indexing
+    plogit_values = plogits[pidx]
+    alogit_values = alogits[aidx]
+    move_logits = plogit_values + alogit_values  # Element-wise addition
+
+    move_to_logit = dict(zip(valid_shobu_moves, move_logits))
+
+    if logits:
+        return move_to_logit
+
+    # Apply softmax over the logits
+    softmax_tensor = F.softmax(move_logits, dim=0)
+
+    if noise:
+        alpha = 0.22
+        eta = torch.distributions.Dirichlet(torch.full_like(softmax_tensor, alpha)).sample()
+        softmax_tensor = 0.75 * softmax_tensor + 0.25 * eta
+
+    return dict(zip(valid_shobu_moves, softmax_tensor))
+
+
+
 #### LOSS FUNCTION UTILS ####
     
 def compute_returns(rewards: list, values: torch.tensor, device: torch.device, gamma: float=0.99, lam: float=0.95) -> list[torch.tensor, torch.tensor]:

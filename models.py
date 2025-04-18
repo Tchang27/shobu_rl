@@ -2,6 +2,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
+class ResidualBlock2D_PPO(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(ResidualBlock2D_PPO, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding='same')
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding='same')
+
+    def forward(self, x):
+        residual = x
+        out = F.relu(self.conv1(x))
+        out = self.conv2(out)
+        out += residual
+        out = F.relu(out)
+        return out
+
 class ResidualBlock2D(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ResidualBlock2D, self).__init__()
@@ -18,6 +33,19 @@ class ResidualBlock2D(nn.Module):
         out = F.relu(out)
         return out
     
+class GlobalPooling_BiasStructure(nn.Module):
+    def __init__(self, in_channels):
+        super(GlobalPooling_BiasStructure, self).__init__()
+        self.b1 = nn.BatchNorm2d(in_channels)
+        self.pool = KataGoGlobalPooling()
+        self.linear = nn.Linear(in_channels*2, in_channels)    
+
+    def forward(self, p, g):
+        out = F.relu(self.b1(g))
+        out = self.pool(g)
+        out = self.linear(out)
+        out = out.unsqueeze(-1).unsqueeze(-1)
+        return p+out    
     
 class KataGoGlobalPooling(nn.Module):
     def __init__(self):
@@ -36,7 +64,6 @@ class KataGoGlobalPooling(nn.Module):
         # Concatenate all
         pooled = torch.cat([mean, max_val], dim=1)  # [B, 2C]
         return pooled
-
     
 class MLP_Head(nn.Module):
     def __init__(self, in_channels, out_channels, hidden_channels=512):
@@ -86,17 +113,20 @@ class Critic_MCTS(nn.Module):
     
 
 class Policy_Head(nn.Module):
-    def __init__(self, in_channels=96, out_channels=68, hidden_channels=256):
+    def __init__(self, in_channels=96, out_channels=68, hidden_channels=96):
         super(Policy_Head, self).__init__()
-        self.net = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, bias=False, padding='same'),
-            nn.BatchNorm2d(in_channels),
-            nn.ReLU(),
-            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding='same'),
-        )
-
+        self.conv1 = nn.Conv2d(in_channels, hidden_channels, kernel_size=1, stride=1, bias=False, padding='same')
+        self.conv2 = nn.Conv2d(in_channels, hidden_channels, kernel_size=1, stride=1, bias=False, padding='same')
+        self.pool = GlobalPooling_BiasStructure(hidden_channels)
+        self.b2 = nn.BatchNorm2d(hidden_channels)
+        self.conv3 = nn.Conv2d(hidden_channels, out_channels, kernel_size=1, stride=1, padding='same')
+        
     def forward(self, x):
-        return self.net(x)
+        p = self.conv1(x)
+        g = self.conv2(x)
+        out = F.relu(self.b2(self.pool(p, g)))
+        out = self.conv3(out)
+        return out
     
     
 class Shobu_PPO(nn.Module):
@@ -113,22 +143,22 @@ class Shobu_PPO(nn.Module):
             nn.ReLU(),
             
             # Residual blocks
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
-            ResidualBlock2D(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
+            ResidualBlock2D_PPO(256, 256),
         )
         
         # passive head
@@ -147,7 +177,7 @@ class Shobu_PPO(nn.Module):
         self.aggressive_pos_head = MLP_Head(self.fc_input_size+74, 64)
         
         # critic head
-        self.critic = Critic(self.fc_input_size//2, hidden_channels=256) 
+        self.critic = Critic(self.fc_input_size//2, hidden_channels=16) 
         
 
     def _calculate_fc_input_size(self, num_boards, board_size):
@@ -193,7 +223,7 @@ class Shobu_PPO(nn.Module):
         }
     
     
-    def value_function(self, x): 
+    def get_value(self, x): 
         '''
         Get q value
         '''
@@ -399,18 +429,11 @@ class Shobu_MCTS_Conv(nn.Module):
         # critic head
         self.critic = Critic_MCTS(hidden_channels=48)
     
-    
-    def get_features(self, x):
-        # Input shape: (batch_size, num_boards, board_size, board_size)
-        x = self.backbone(x)      
-        return x
-    
-    
     def get_policy(self, x):
         '''
         Get policy
         '''
-        x = self.get_features(x)
+        x = self.backbone(x)
         x = self.policy(x)
         
         # separate passive and aggressive
@@ -428,7 +451,7 @@ class Shobu_MCTS_Conv(nn.Module):
         '''
         Get q value
         '''
-        x = self.get_features(x)
+        x = self.backbone(x)
         # critic
         q_value = self.critic(x)
         return q_value
@@ -438,7 +461,7 @@ class Shobu_MCTS_Conv(nn.Module):
         '''
         Get policy and q value
         '''
-        feat = self.get_features(x)
+        feat = self.backbone(x)
         
         # policy
         x = self.policy(feat)

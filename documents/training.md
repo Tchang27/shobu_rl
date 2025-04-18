@@ -227,7 +227,8 @@ Epochs 15300_start - 19900_start
         - against 18000_random: 45-13-42, with 23-6-21 as black and 22-7-21 as white
         - against 31200_random: 39-10-51, with 22-6-22 as black and 17-4-29 as white
     - 19900_start:
-        - against 19900_random: 
+        - against 19900_random: 56-8-36, with 30-4-16 as black and 26-4-20 as white
+        - against 31200_random: 37-7-56, with 20-4-26 as black and 17-3-30 as white
 
 ## `Thomas: Increased playout cap, random positions`
 Epochs 23700_random - 31500_random
