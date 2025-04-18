@@ -1,6 +1,6 @@
 # Thomas's Notes on Training Regime Timeline
 
-## `Intial`
+## `Thomas: Intial`
 Epochs 0 - 4200
 - Initial training from random self play
 - Begin from starting position
@@ -17,7 +17,7 @@ Epochs 0 - 4200
     - Some overfitting observed empirically, model plays very similarly each game
     - To mitigate this: increase exploration during trainig
 
-## `Exploration emphasis`
+## `Thomas: Exploration emphasis`
 Epochs 4200 - 6900
 - Training from last checkpoint
 - Begin from starting position
@@ -40,7 +40,7 @@ Epochs 4200 - 6900
 - Found a major bug in eval.py, model learning better than expected
 - Will continue training the runs below
 
-## `Start from noisy prior, learned value function`
+## `Thomas: Start from noisy prior, learned value function`
 Epochs 6900 - 8600
 - Training from last checkpoint
 - Begin from starting position
@@ -63,7 +63,7 @@ Epochs 6900 - 8600
     could indicate that the prior doesn't need to be very sharp, just good enough
     - Try curriculum learning: introduce random positions and play out from there
 
-## `Start from sharper prior, learned value function`
+## `Thomas: Start from sharper prior, learned value function`
 Epochs 4200v2 - 8300v2
 - Training from checkpoint 4200
 - Begin from starting position
@@ -99,7 +99,7 @@ Epochs 4200v2 - 8300v2
 - Positions where there are no valid moves is a loss for the current player
 - Check implemented for remainder of training
 
-## `Incorporating random positions in training`
+## `Thomas: Incorporating random positions in training`
 Epochs 8600 - 15600_random
 - Training from last checkpoint from `Start from noisy prior, learned value function`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
@@ -132,7 +132,7 @@ Epochs 8600 - 15600_random
     because of less locking overlap and more game results for the value network
     - improvement is plateauing, we should increase the learning rate for this regime
 
-## `Continuing training from start positions`
+## `Ayushman: Continuing training from start positions`
 Epochs 8600 - 15300_start
 - Training from last checkpoint from `Start from noisy prior, learned value function`
 - Begin from starting position
@@ -171,7 +171,7 @@ Epochs 8600 - 15300_start
         - against 15600_random: 48-3-49, with 31-1-18 as black and 17-2-31 as white
         - against 21100_random: 44-3-53, with 28-1-21 as black and 16-2-32 as white
 
-## `Increased learning rate, random positions`
+## `Thomas: Increased learning rate, random positions`
 Epochs 15600_random - 23700_random
 - Training from last checkpoint from `Incorporating random positions in training`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
@@ -206,8 +206,8 @@ Epochs 15600_random - 23700_random
         - against 15300_start: 54-7-39, with 34-5-11 as black and 20-2-28 as white
     - model finally plateauing -> try increase search depth
 
-## `Increased learning rate, starting position`
-Epochs 15300_start - ?
+## `Ayushman: Increased learning rate, starting position`
+Epochs 15300_start - 18000_start
 - Training from last checkpoint from `Continuing training from start positions`
 - Begin from starting position
 - Warmup: 25000 samples
@@ -220,9 +220,14 @@ Epochs 15300_start - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
-    - 
+    - 16000_start:
+        - against 16000_random: 45-9-46, with 20-7-23 as black and 25-2-23 as white
+        - against 31200_random: 22-4-74, with 11-2-37 as black and 11-2-37 as white
+    - 18000_start:
+        - against 18000_random: 45-13-42, with 23-6-21 as black and 22-7-21 as white
+        - against 31200_random: 39-10-51, with 22-6-22 as black and 17-4-29 as white
 
-## `Increased playout cap, random positions`
+## `Thomas: Increased playout cap, random positions`
 Epochs 23700_random - 31500_random
 - Training from last checkpoint from `Increased learning rate, random positions`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
@@ -252,9 +257,9 @@ Epochs 23700_random - 31500_random
     - 31200_random:
         - against 27700_random: 59-11-30, with 34-6-10 as black and 25-5-20 as white
         - against 15300_start: 66-5-29, with 35-3-12 as black and 31-2-17 as white
-    - severe overfitting on opening move, restarting with inf temperature for first three moves
+    - overfitting on opening move, restarting with inf temperature for first three moves
 
-## `Increase temp, random positions`
+## `Thomas: Increase temp, random positions`
 Epochs 31500_random - ?
 - Training from last checkpoint from `Increased playout cap, random positions`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
@@ -272,11 +277,12 @@ Epochs 31500_random - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
-    - 
+    - 33200_random
+        - against 31200_random: 
 
-## `Exploration +0.1 on prior, random positions`
+## `Ayushman: Exploration +0.1 on prior, random positions`
 Epochs 31600_explore - ?
-- Training from warm annealed restart of 
+- Training from warm annealed restart of `Increase temp, random positions`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
 - Warmup: 40000 samples (avoid overfitting)
 - Max moves: 128 (64 per player)
@@ -293,7 +299,5 @@ Epochs 31600_explore - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
-    - smoothed out priors from beginning
-    - 31600_explore
-        - against 31500_random: 
+    - 
 
