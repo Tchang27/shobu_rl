@@ -207,7 +207,7 @@ Epochs 15600_random - 23700_random
     - model finally plateauing -> try increase search depth
 
 ## `Ayushman: Increased learning rate, starting position`
-Epochs 15300_start - 18000_start
+Epochs 15300_start - 19900_start
 - Training from last checkpoint from `Continuing training from start positions`
 - Begin from starting position
 - Warmup: 25000 samples
@@ -226,6 +226,8 @@ Epochs 15300_start - 18000_start
     - 18000_start:
         - against 18000_random: 45-13-42, with 23-6-21 as black and 22-7-21 as white
         - against 31200_random: 39-10-51, with 22-6-22 as black and 17-4-29 as white
+    - 19900_start:
+        - against 19900_random: 
 
 ## `Thomas: Increased playout cap, random positions`
 Epochs 23700_random - 31500_random
@@ -263,14 +265,14 @@ Epochs 23700_random - 31500_random
 Epochs 31500_random - ?
 - Training from last checkpoint from `Increased playout cap, random positions`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
-- Warmup: 40000 samples (avoid overfitting)
+- Warmup: 35000 samples (avoid overfitting)
 - Max moves: 128 (64 per player)
 - LR: 6e-5
 - Playout cap: 800
 - Temperature scheduling
     - play optimally from a random position
     - from start:
-        - inf on first move
+        - inf on first moves
         - 3 until move 6
         - 1 until move 10
         - Linear decay to 0 by move 20
@@ -278,20 +280,26 @@ Epochs 31500_random - ?
 - Value loss weight: 1.5
 - Results
     - 33200_random
-        - against 31200_random: 
+        - against 31200_random: 52-9-39, with 29-3-18 as black and 23-6-21 as white
+        - against 27700_random: 62-4-32, with 33-3-14 as black and 29-1-20 as white
+    - 34200_random
+        - against 33200_random: 60-8-32, with 33-4-13 as black and 27-4-19 as white
+        - against 31200_random: 46-14-40, with 27-4-19 as black and 19-10-21 as white
+    - 36600_random
+        - against 34600_random: 54-8-38, with 31-6-13 as black and 23-2-25 as white
 
 ## `Ayushman: Exploration +0.1 on prior, random positions`
 Epochs 31600_explore - ?
 - Training from warm annealed restart of `Increase temp, random positions`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
-- Warmup: 40000 samples (avoid overfitting)
+- Warmup: 35000 samples (avoid overfitting)
 - Max moves: 128 (64 per player)
 - LR: 6e-5
 - Playout cap: 800
 - Temperature scheduling
     - play optimally from a random position
     - from start:
-        - inf on first move
+        - inf on first moves
         - 3 until move 6
         - 1 until move 10
         - Linear decay to 0 by move 20

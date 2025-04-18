@@ -426,8 +426,8 @@ class Shobu_MCTS_RL:
                 move_to_logit = get_joint_logits(board, po, logits=True)
                 policy = torch.stack([move_to_logit[k] for k in move_to_logit.keys()])
                 pi_dist = torch.tensor([pi_dict[k] for k in pi_dict.keys()], device=self.device, dtype=torch.float32)
-                # policy_losses.append(-torch.sum(pi_dist * F.log_softmax(policy, dim=-1), dim=1)) 
-                policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
+                policy_losses.append(-torch.sum(pi_dist * F.log_softmax(policy, dim=-1))) 
+                #policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
                 i += 1
             policy_loss = torch.mean(torch.stack(policy_losses))
 
