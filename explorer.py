@@ -291,6 +291,19 @@ if True:
 		wwww .b..
 		""", next_mover=Player.BLACK)
 	
+	BLACK_MATED_IN_1_V2 = Shobu.from_str(
+		"""
+		w... ww..
+		.w.. .w..
+		.... ....
+		bbbb bbbb
+
+		.b.. ..ww
+		.w.. ....
+		..w. .w..
+		.bbb .b..
+		""", next_mover=Player.BLACK)
+	
 	TEST = Shobu.from_str(
 		"""
 		...w ....

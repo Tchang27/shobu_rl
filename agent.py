@@ -21,7 +21,7 @@ class Agent(abc.ABC):
 	"""
 
 	@abc.abstractmethod
-	def move(self, board: Shobu) -> ShobuMove:
+	def move(self, board: Shobu, half_ply: int) -> ShobuMove:
 		"""
 		Given the current board state, decide the next move that you wish to play.
 		:param board: current board state
@@ -47,7 +47,7 @@ class UserAgent(Agent):
 	before they are actually played.
 	"""
 
-	def move(self, board: Shobu):
+	def move(self, board: Shobu, half_ply: int):
 		while True:
 			input_str = input("Input your next move: ")
 			parsed = ShobuMove.from_str(input_str)
@@ -108,7 +108,8 @@ class MCTSAgent(Agent):
 				was_moved = True
 			mcts = MCTree(self.model, board, self.device)
 			rollout = mcts.search(800, noise=False)
-			if half_ply < 2:
+			print(f'model thinks it has {((rollout.total_reward / rollout.num_visits + 1) * 50):.1f}% chance of winning')
+			if half_ply < 0:
 				move = rollout.sample_move(float('inf'))
 			else:
 				move = rollout.sample_move(0)

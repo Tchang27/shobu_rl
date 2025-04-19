@@ -229,6 +229,9 @@ Epochs 15300_start - 19900_start
     - 19900_start:
         - against 19900_random: 56-8-36, with 30-4-16 as black and 26-4-20 as white
         - against 31200_random: 37-7-56, with 20-4-26 as black and 17-3-30 as white
+    - performing worse than random positions, switching over to random position training
+        - try cross entropy directly instead of kl div
+        - try training from sharp vs noisy priors
 
 ## `Thomas: Increased playout cap, random positions`
 Epochs 23700_random - 31500_random
@@ -262,8 +265,8 @@ Epochs 23700_random - 31500_random
         - against 15300_start: 66-5-29, with 35-3-12 as black and 31-2-17 as white
     - overfitting on opening move, restarting with inf temperature for first three moves
 
-## `Thomas: Increase temp, random positions`
-Epochs 31500_random - ?
+## `Thomas: Increase temp, random positions, cross entropy`
+Epochs 31500_random - 37300_random
 - Training from last checkpoint from `Increased playout cap, random positions`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
 - Warmup: 35000 samples (avoid overfitting)
@@ -288,8 +291,12 @@ Epochs 31500_random - ?
         - against 31200_random: 46-14-40, with 27-4-19 as black and 19-10-21 as white
     - 36600_random
         - against 34600_random: 54-8-38, with 31-6-13 as black and 23-2-25 as white
+    - 39200_random
+        - against 31200_random: 54-12-34, with 26-9-15 as black and 28-3-19 as white
+        - against 36200_random: 49-14-37, with 25-7-18 as black and 24-7-19 as white
+        
 
-## `Ayushman: Exploration +0.1 on prior, random positions`
+## `Ayushman: Exploration +0.1 on prior, random positions, cross entropy`
 Epochs 31600_explore - ?
 - Training from warm annealed restart of `Increase temp, random positions`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
@@ -308,4 +315,3 @@ Epochs 31600_explore - ?
 - Value loss weight: 1.5
 - Results
     - 
-
