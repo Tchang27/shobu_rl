@@ -314,4 +314,36 @@ Epochs 31600_explore - ?
 - Exploration bonus coefficient: 1
 - Value loss weight: 1.5
 - Results
+    - 34000_explore
+        - against 34000_random: 56-14-30, with 33-7-10 as black and 23-7-20 as white
+        - against 39700_random: 42-18-40, with 23-10-17 as black and 19-8-23 as white
+    - sig gap, switching to this run and deprecating others
     - 
+
+## `Thomas: Continuing random positions from warm restarted model`
+Epochs 34000_explore - ?
+- Training from warm annealed restart of `Increase temp, random positions`
+- 0.8 probability to start from random position, 0.2 probability to start from starting position
+- Warmup: 35000 samples (avoid overfitting)
+- Max moves: 128 (64 per player)
+- LR: 6e-5
+- Playout cap: 800
+- Temperature scheduling
+    - play optimally from a random position
+    - from start:
+        - inf on first moves
+        - 3 until move 6
+        - 1 until move 10
+        - Linear decay to 0 by move 20
+- Exploration bonus coefficient: 1
+- Value loss weight: 1.5
+- Results
+    - 37100_more:
+        - against 34000_explore: 35-12-53, with 21-5-24 as black and 14-7-29 as white
+        - against 36100_explore: 49-14-37, with 25-6-19 as black and 24-8-18 as white
+    - 39500_more:
+        - against 34000_explore: 28-16-56, with 17-9-24 as black and 11-7-32 as white
+    - 41800_more:
+        - against 34000_explore: 27-14-59, with 18-7-25 as black and 9-7-34 as white
+    - 46100_more:
+        - against 34000_explore: 42-12-46, with 26-6-18 as black and 16-6-28 as white

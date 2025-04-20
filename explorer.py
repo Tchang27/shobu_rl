@@ -6,7 +6,8 @@ import readline
 
 import torch
 from mcts_simul import MCTree
-from models import Shobu_MCTS
+from mcts_conv import MCTree_Conv
+from models import Shobu_MCTS, Shobu_MCTS_Conv
 from shobu import Player, Shobu
 
 """

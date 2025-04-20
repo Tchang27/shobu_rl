@@ -26,7 +26,7 @@ if __name__ == '__main__':
     
 	play_game(
 		UserAgent(),
-		MCTSAgent("model_weights/mcts_checkpoint_39200_kl.pth"),
+		MCTSAgent("model_weights/mcts_checkpoint_46100_more_random.pth"),
 		#MCTSAgent("model_weights/mcts_checkpoint_31600_noisy_random.pth"),
 		max_moves = 32,
 		print_info = True,
