@@ -1,13 +1,11 @@
 import abc
 import random
-import time
 from shobu import Shobu, ShobuMove, Player
 from models import Shobu_PPO, Shobu_MCTS, Shobu_MCTS_Conv
 from rl_utils import model_action
 from mcts_simul import MCTree
 from mcts_conv import MCTree_Conv
 import torch
-import copy
 
 
 class Agent(abc.ABC):
@@ -25,7 +23,16 @@ class Agent(abc.ABC):
 		"""
 		Given the current board state, decide the next move that you wish to play.
 		:param board: current board state
+		:param half_ply: current move number, in half plies
 		:return: your move
+		"""
+
+	@abc.abstractmethod
+	def name(self) -> str:
+		"""
+		Returns the "name" of this agent. Choose something that is human readable
+		and that uniquely identifies this agent.
+		:return: str name
 		"""
 
 
@@ -39,6 +46,9 @@ class RandomAgent(Agent):
 		candidates = board.move_gen()
 		return random.choice(candidates)
 
+	def name(self):
+		return "RandomAgent"
+
 
 class UserAgent(Agent):
 	"""
@@ -46,6 +56,9 @@ class UserAgent(Agent):
 	`ShobuMove.from_str` for more details) into the terminal. Moves are validated
 	before they are actually played.
 	"""
+
+	def __init__(self, user_name="UserAgent"):
+		self.agent_name = user_name
 
 	def move(self, board: Shobu, half_ply: int):
 		while True:
@@ -55,6 +68,9 @@ class UserAgent(Agent):
 				return parsed
 			print("Illegal move. ", end="")
 
+	def name(self):
+		return self.agent_name
+
 
 # TODO Flask agent, RL agent, etc
 class RLAgent(Agent):
@@ -62,12 +78,13 @@ class RLAgent(Agent):
 	A `RLAgent` is a bot player which uses a trained PPO model
 	to select moves.
 	"""
-	def __init__(self, checkpoint_path: str):
+	def __init__(self, checkpoint_path: str, name="PPOAgent"):
 		self.device = torch.device("cpu")   
 		self.model = Shobu_PPO(self.device)
 		self.model.to(self.device)
 		self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
 		self.model.eval()
+		self.agent_name = name
 
 	def move(self, board: Shobu, board_reps: list):
 		torch.set_num_threads(1)
@@ -86,17 +103,26 @@ class RLAgent(Agent):
 				move.flip()
 		return move
 
+	def name(self):
+		return self.agent_name
+
+
 class MCTSAgent(Agent):
 	"""
 	A `MCTSAgent` is a bot player which uses a trained MCTS model
 	to select moves.
 	"""
-	def __init__(self, checkpoint_path: str):
+	def __init__(self, checkpoint_path: str, name=None):
 		self.device = torch.device("cpu")   
 		self.model = Shobu_MCTS(self.device)
 		self.model.to(self.device)
 		self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
 		self.model.eval()
+		if name is None:
+			# choose a sensible default
+			self.agent_name = checkpoint_path.split('/')[-1].split('.')[0]
+		else:
+			self.agent_name = name
 
 	def move(self, board: Shobu, half_ply: int):
 		torch.set_num_threads(1)
@@ -118,19 +144,27 @@ class MCTSAgent(Agent):
 				board.flip()
 				move.flip()
 		return move
-    
-    
+
+	def name(self):
+		return self.agent_name
+
+
 class MCTSConvAgent(Agent):
 	"""
 	A `MCTSConvAgent` is a bot player which uses a trained MCTS model
 	to select moves.
 	"""
-	def __init__(self, checkpoint_path: str):
+	def __init__(self, checkpoint_path: str, name=None):
 		self.device = torch.device("cpu")   
 		self.model = Shobu_MCTS_Conv(self.device)
 		self.model.to(self.device)
 		self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
 		self.model.eval()
+		if name is None:
+			# choose a sensible default
+			self.agent_name = checkpoint_path.split('/')[-1].split('.')[0]
+		else:
+			self.agent_name = name
 
 	def move(self, board: Shobu, half_ply: int):
 		torch.set_num_threads(1)
@@ -151,3 +185,6 @@ class MCTSConvAgent(Agent):
 				board.flip()
 				move.flip()
 		return move
+
+	def name(self):
+		return self.agent_name
