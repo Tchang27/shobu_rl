@@ -298,7 +298,24 @@ def tiered_arena(
 	print(f"Done running, collecting results...")
 	result_map = {}
 	for id_a, id_b, result in results:
-		if id_a in result_map:
+		# existing entries case
+		if id_a in result_map and id_b in result_map[id_a]:
+			if result is None:
+				result_map[id_a][id_b][1] += 1  # draw
+			elif result == Player.BLACK:
+				result_map[id_a][id_b][0] += 1  # id_a played black and won
+			else:
+				result_map[id_a][id_b][2] += 1
+		elif id_b in result_map and id_a in result_map[id_b]:
+			if result is None:
+				result_map[id_b][id_a][1] += 1  # draw
+			elif result == Player.BLACK:
+				result_map[id_b][id_a][2] += 1  # id_b played white and lost
+			else:
+				result_map[id_b][id_a][0] += 1   # id_b played white and won
+
+		# insert case
+		elif id_a in result_map:
 			if id_b not in result_map[id_a]:
 				result_map[id_a][id_b] = [0, 0, 0]
 			if result is None:
