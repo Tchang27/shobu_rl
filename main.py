@@ -1,6 +1,5 @@
 from agent import UserAgent, RandomAgent, RLAgent, MCTSAgent
-from eval import round_robin, n_game_match, play_game
-
+from eval import round_robin, n_game_match, play_game, tiered_arena
 
 if __name__ == '__main__':
 	# Hopefully our players will be more interesting than this :)
@@ -10,7 +9,7 @@ if __name__ == '__main__':
 	# 	#RandomAgent(), 
 	# 	n=100,
 	# 	max_moves=32
-    # )
+	# )
 	# print(res[0])
 	# print(res[1])
 	# print(res[2])
@@ -23,11 +22,8 @@ if __name__ == '__main__':
 	# )
 
 	# print(elos)
-    
-	play_game(
-		UserAgent(),
-		MCTSAgent("model_weights/mcts_checkpoint_48700_more_random.pth"),
-		#MCTSAgent("model_weights/mcts_checkpoint_31600_noisy_random.pth"),
-		max_moves = 32,
-		print_info = True,
-		)
+	tiered_arena(
+		[RandomAgent("fred"), RandomAgent("george"), RandomAgent("matthew")],
+		[RandomAgent("jennifer"), RandomAgent("natalie"), RandomAgent("astrid")],
+		"."
+	)

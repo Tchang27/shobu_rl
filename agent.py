@@ -42,12 +42,15 @@ class RandomAgent(Agent):
 	plays it.
 	"""
 
+	def __init__(self, name="RandomAgent"):
+		self.agent_name = name
+
 	def move(self, board: Shobu, half_ply: int):
 		candidates = board.move_gen()
 		return random.choice(candidates)
 
 	def name(self):
-		return "RandomAgent"
+		return self.agent_name
 
 
 class UserAgent(Agent):
