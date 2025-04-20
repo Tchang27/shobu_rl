@@ -266,7 +266,7 @@ Epochs 23700_random - 31500_random
     - overfitting on opening move, restarting with inf temperature for first three moves
 
 ## `Thomas: Increase temp, random positions, cross entropy`
-Epochs 31500_random - 37300_random
+Epochs 31500_random - 39200_random
 - Training from last checkpoint from `Increased playout cap, random positions`
 - 0.5 probability to start from random position, 0.5 probability to start from starting position
 - Warmup: 35000 samples (avoid overfitting)
@@ -318,7 +318,9 @@ Epochs 31600_explore - ?
         - against 34000_random: 56-14-30, with 33-7-10 as black and 23-7-20 as white
         - against 39700_random: 42-18-40, with 23-10-17 as black and 19-8-23 as white
     - sig gap, switching to this run and deprecating others
-    - 
+    - 38100_explore
+        - against 34000_explore: 53-18-29, with 32-7-11 as black and 21-11-18 as white
+        - against 46100_more: 53-17-30, with 33-3-14 as black and 20-14-16 as white
 
 ## `Thomas: Continuing random positions from warm restarted model`
 Epochs 34000_explore - ?
@@ -347,3 +349,4 @@ Epochs 34000_explore - ?
         - against 34000_explore: 27-14-59, with 18-7-25 as black and 9-7-34 as white
     - 46100_more:
         - against 34000_explore: 42-12-46, with 26-6-18 as black and 16-6-28 as white
+        - against 38100_explore: 30-17-53, with 16-14-20 as black and 14-3-33 as white
