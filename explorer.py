@@ -2,6 +2,7 @@
 
 import sys
 import os
+import math
 import readline
 
 import torch
@@ -89,6 +90,84 @@ def do_print_node():
 		return
 	n = nodes[cur_node]
 	print(_node_to_str(n))
+
+def _dot_recur(f, node, parent_num, move_str, node_num, total_visits, prune_ratio, top_n):
+	# pruning case
+	if node.num_visits == 0:
+		return node_num
+
+	my_node_num = node_num
+	node_num += 1
+
+	# decisive result case
+	if node.value is None:
+		if node.player == Player.BLACK:
+			f.write(f'N{my_node_num}[label="0-1", shape="box" style="filled" fillcolor="white" fontcolor="black"];\n')
+		else:
+			f.write(f'N{my_node_num}[label="1-0", shape="box" style="filled" fillcolor="black" fontcolor="white"];\n')
+	else:
+		# write yourself to f
+		fillcolor, fontcolor = ("black", "white") if node.player == Player.BLACK else ("white", "black")
+		f.write(f'N{my_node_num}[label="N = {node.num_visits}\\nQ = {(node.total_reward / node.num_visits):+0.3f}" style="filled" fillcolor="{fillcolor}" fontcolor="{fontcolor}"];\n')
+
+	# write your connection to your parent if there is one
+	if parent_num != -1:
+		f.write(f'N{parent_num} -> N{my_node_num} [label=" {move_str}", penwidth={math.ceil(node.num_visits / total_visits * 10)}];\n')
+
+	# select top N nodes
+	if top_n == -1 or len(node.children) <= top_n:
+		children = node.children
+	else:
+		children = {}
+		topchildren = list(node.children.items())
+		topchildren.sort(key=lambda e: e[1].num_visits, reverse=True)
+		prune_qualifiers = []
+		prune_threshold = topchildren[0][1].num_visits * prune_ratio
+		for e in topchildren:
+			if e[1].num_visits >= prune_threshold:
+				prune_qualifiers.append(e)
+		topchildren = dict(prune_qualifiers[:top_n])
+		omitted_visits = 0
+		omitted_nodes = 0
+		for k, v in node.children.items():
+			if k in topchildren:
+				children[k] = v
+			elif v.num_visits > 0:
+				omitted_visits += v.num_visits
+				omitted_nodes += 1
+
+		# omitted node (can toggle the bool below to turn including this off)
+		if omitted_nodes and True:
+			omitted_node_num = node_num
+			node_num += 1
+			f.write(f'N{omitted_node_num}[label="[omitted {omitted_nodes} nodes]", shape="box" style="filled" fillcolor="white" fontcolor="black"];\n')
+			f.write(f'N{my_node_num} -> N{omitted_node_num} [penwidth={math.ceil(omitted_visits / total_visits * 10)}];\n')
+
+	# recur on selected children
+	for k, v in children.items():
+		if node.player == Player.WHITE:
+			k.flip()
+			strk = str(k)
+			k.flip()
+		else:
+			strk = str(k)
+		node_num = _dot_recur(f, v, my_node_num, strk, node_num, total_visits, prune_ratio, top_n)
+
+	return node_num
+
+def do_write_dot(outpath, prune_ratio, top_n):
+	if cur_node == -1:
+		print("No nodes")
+		return
+	n = nodes[cur_node]
+	prune_ratio = float(prune_ratio)
+	top_n = int(top_n)
+	with open(outpath, "w") as f:
+		f.write('digraph "mcts" {\n')
+		f.write('node [fontname="CMU Serif"]\n')
+		f.write('edge [fontname="CMU Serif"]\n')
+		_dot_recur(f, n, -1, None, 0, n.num_visits, prune_ratio, top_n)
+		f.write('}')
 
 def do_show_position():
 	if cur_node == -1:
@@ -206,7 +285,7 @@ def do_sample(tau):
 commands = {
 	"board": ("Discards the current tree if it exists and sets the given board position as the current node.", do_board),
 	"print_node": ("Print information about the current node.", do_print_node),
-	"view_position": ("Print information about the current node.", do_show_position),
+	"view_position": ("Print the current board state.", do_show_position),
 	"search": ("Sets the current position as the root node (discarding the current tree), and executes a tree search from the current position (DIRICHLET DISABLED).", do_search),
 	"noise_search": ("Same thing as search, except searches with dirichlet noise enabled.", do_dirichlet_search),
 	"children": ("List the children of this node", do_children),
@@ -215,6 +294,7 @@ commands = {
 	"down": ("Go to a child node of the current node, by specifying a move.", do_down),
 	"jump": ("Jump to a particular node in the trace.", do_jump),
 	"get_move": ("Sample the next move from this position. Choose tau=0 for strongest selection.", do_sample),
+	"write_dot": ("Write the subtree under the current node out to a .dot file.", do_write_dot),
 	"help": ("Prints this help message.", do_help)
 }
 
