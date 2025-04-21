@@ -19,7 +19,7 @@ of Agents. This includes facilities for playing one-off games as well as
 round robin tournaments.
 """
 
-POOL_SIZE = 12
+POOL_SIZE = 30
 
 def play_game(
 		black_player: Agent,
@@ -99,6 +99,7 @@ def _run_game_and_update(args):
 	white = rated_agents[id_b]
 	torch.manual_seed(seed)
 	np.random.seed(seed)
+	torch.set_num_threads(1)
 	return (id_a, id_b, play_game(black.agent, white.agent, max_moves=max_moves))
 
 
@@ -228,6 +229,7 @@ def _arena_play_game(args):
 	white = agents[id_b]
 	torch.manual_seed(seed)
 	np.random.seed(seed)
+	torch.set_num_threads(1)
 	return id_a, id_b, play_game(black, white, max_moves=max_moves)
 
 

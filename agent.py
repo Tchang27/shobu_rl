@@ -128,7 +128,7 @@ class MCTSAgent(Agent):
 			self.agent_name = name
 
 	def move(self, board: Shobu, half_ply: int):
-		torch.set_num_threads(1)
+		#torch.set_num_threads(1)
 		with torch.no_grad():
 			# check if we need to flip board
 			was_moved = False
@@ -137,7 +137,7 @@ class MCTSAgent(Agent):
 				was_moved = True
 			mcts = MCTree(self.model, board, self.device)
 			rollout = mcts.search(800, noise=False)
-			print(f'model thinks it has {((rollout.total_reward / rollout.num_visits + 1) * 50):.1f}% chance of winning')
+			#print(f'model thinks it has {((rollout.total_reward / rollout.num_visits + 1) * 50):.1f}% chance of winning')
 			if half_ply < 0:
 				move = rollout.sample_move(float('inf'))
 			else:
@@ -170,7 +170,7 @@ class MCTSConvAgent(Agent):
 			self.agent_name = name
 
 	def move(self, board: Shobu, half_ply: int):
-		torch.set_num_threads(1)
+		#torch.set_num_threads(1)
 		with torch.no_grad():
 			# check if we need to flip board
 			was_moved = False
