@@ -128,7 +128,6 @@ class MCTSAgent(Agent):
 			self.agent_name = name
 
 	def move(self, board: Shobu, half_ply: int):
-		#torch.set_num_threads(1)
 		with torch.no_grad():
 			# check if we need to flip board
 			was_moved = False
@@ -170,7 +169,6 @@ class MCTSConvAgent(Agent):
 			self.agent_name = name
 
 	def move(self, board: Shobu, half_ply: int):
-		#torch.set_num_threads(1)
 		with torch.no_grad():
 			# check if we need to flip board
 			was_moved = False
