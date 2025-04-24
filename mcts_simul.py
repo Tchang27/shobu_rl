@@ -72,9 +72,9 @@ class MCNode:
         max_idx = np.argmax(ucb_scores)
         return moves[max_idx], children[max_idx]
 
-    def expansion(self, candidate_moves: dict[ShobuMove, torch.tensor], cpuct: float=1.0):
+    def expansion(self, candidate_moves: dict[ShobuMove, torch.tensor]):
         for move, probability in candidate_moves.items():
-            self.children[move] = MCNode(probability.item(), Player(not self.player.value), cpuct)
+            self.children[move] = MCNode(probability.item(), Player(not self.player.value), self.cpuct)
         self.is_expanded = True
 
     def sample_move(self, tau: float) -> ShobuMove:
@@ -103,11 +103,10 @@ class MCTree:
     # init
     ## model (policy + value)
     def __init__(self, model: Shobu_MCTS, starting_state: Shobu, device: torch.device, cpuct: float=1.0):
-        self.root = MCNode(0, starting_state.next_mover)
+        self.root = MCNode(0, starting_state.next_mover, cpuct)
         self.root.state = starting_state
         self.model = model
         self.device = device
-        self.cpuct = cpuct
 
     def __del__(self):
         self.root = None
@@ -167,14 +166,14 @@ class MCTree:
         else:
             evaluation, move_to_probability = self._value_and_policy(path_to_leaf, noise)
             cur_node.value = evaluation
-            cur_node.expansion(move_to_probability, self.cpuct)
+            cur_node.expansion(move_to_probability)
 
         self.backprop(evaluation, path_to_leaf, cur_node.player)
 
     def search(self, num_simulations: int, noise=True) -> MCNode:
         value, move_to_probability = self._value_and_policy([self.root], noise)
         self.root.value = value
-        self.root.expansion(move_to_probability, self.cpuct)
+        self.root.expansion(move_to_probability)
         for _ in range(num_simulations):
             self.simulation(noise)
         return self.root
@@ -489,7 +488,7 @@ class Shobu_MCTS_RL:
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
-                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{62200+epoch+1}_explore_random.pth')
+                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{63500+epoch+1}_explore_random.pth')
                 
 
             # garbage collect
@@ -531,7 +530,7 @@ class Shobu_MCTS_RL:
         model.to(self.device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
-        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{62200}_explore_random.pth', map_location=self.device))
+        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{63500}_explore_random.pth', map_location=self.device))
         # share model memory
         model.share_memory()
 
