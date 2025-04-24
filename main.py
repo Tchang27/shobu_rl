@@ -1,4 +1,4 @@
-from agent import UserAgent, RandomAgent, RLAgent, MCTSAgent
+from agent import UserAgent, RandomAgent, RLAgent, MCTSAgent, MCTSConvAgent
 from eval import round_robin, n_game_match, play_game, tiered_arena
 
 if __name__ == '__main__':
@@ -22,8 +22,15 @@ if __name__ == '__main__':
 	# )
 
 	# print(elos)
-	tiered_arena(
-		[RandomAgent("fred"), RandomAgent("george"), RandomAgent("matthew")],
-		[RandomAgent("jennifer"), RandomAgent("natalie"), RandomAgent("astrid")],
-		"."
+	# tiered_arena(
+	# 	[RandomAgent("fred"), RandomAgent("george"), RandomAgent("matthew")],
+	# 	[RandomAgent("jennifer"), RandomAgent("natalie"), RandomAgent("astrid")],
+	# 	"."
+	# )
+    
+	play_game(
+		#UserAgent(),
+		MCTSConvAgent("model_weights/mcts_conv_checkpoint_1000.pth"),
+		MCTSAgent("model_weights/mcts_checkpoint_1000.pth"),
+		print_info = True
 	)

@@ -137,7 +137,7 @@ class MCTSAgent(Agent):
 			mcts = MCTree(self.model, board, self.device)
 			rollout = mcts.search(800, noise=False)
 			#print(f'model thinks it has {((rollout.total_reward / rollout.num_visits + 1) * 50):.1f}% chance of winning')
-			if half_ply < 0:
+			if half_ply < 2:
 				move = rollout.sample_move(float('inf'))
 			else:
 				move = rollout.sample_move(0)

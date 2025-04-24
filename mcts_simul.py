@@ -65,7 +65,7 @@ class MCNode:
         exploration = priors * sqrt_parent_visits / (1 + visits)
 
         # UCB scores
-        ucb_scores = q_values + exploration
+        ucb_scores = q_values + 1.1*exploration
 
         # Find max
         max_idx = np.argmax(ucb_scores)
@@ -133,6 +133,10 @@ class MCTree:
         with torch.no_grad():
             output = self.model(state_tensor)
             evaluation = output['q_value'].item()
+            # root needs softmax temp of 1.03
+            if len(path) < 2:
+                output["passive"] = output["passive"]/1.03
+                output["aggressive"] = output["aggressive"]/1.03
             move_to_probability = get_joint_logits(path[-1].state, output, noise=noise)
         return evaluation, move_to_probability
 
@@ -200,7 +204,8 @@ def temperature_scheduler(epoch_no, move_no):
     else:
         return (10 - move_no) / 5
 
-
+    
+START_POS_PROB = 0.5
 def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
     # chance to start from random position
     start_from_random = False
@@ -300,8 +305,7 @@ MINIBATCH_SIZE = 256
 POOL_SIZE = 60
 TRAINER_SIZE = 2
 WINDOW_SIZE = 50000 # TODO tune this
-WARMUP = 30000 #TODO tune this
-START_POS_PROB = 0.5
+WARMUP = 25000 #TODO tune this
 
 # worker process for simulating game
 def pickled_play_game(shared_model, buffer, lock, device, seed):
@@ -426,8 +430,8 @@ class Shobu_MCTS_RL:
                 move_to_logit = get_joint_logits(board, po, logits=True)
                 policy = torch.stack([move_to_logit[k] for k in move_to_logit.keys()])
                 pi_dist = torch.tensor([pi_dict[k] for k in pi_dict.keys()], device=self.device, dtype=torch.float32)
-                policy_losses.append(-torch.sum(pi_dist * F.log_softmax(policy, dim=-1))) 
-                #policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
+                #policy_losses.append(-torch.sum(pi_dist * F.log_softmax(policy, dim=-1))) 
+                policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
                 i += 1
             policy_loss = torch.mean(torch.stack(policy_losses))
 
@@ -435,7 +439,7 @@ class Shobu_MCTS_RL:
             loss = 1.5*value_loss + policy_loss
             opt.zero_grad(set_to_none=True)
             loss.backward()
-            total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
+            total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0).detach().cpu().item()
             # prevent workers from loading weird state dicts
             with lock:
                 opt.step()
@@ -458,30 +462,30 @@ class Shobu_MCTS_RL:
             for param in critic_params:
                 if param.grad is not None:  # Ensure that gradient exists
                     grad_norm = param.grad.norm()  # Compute the L2 norm of the gradient
-                    grad_norms.append(grad_norm.item())  # Convert to Python float for easier logging
+                    grad_norms.append(grad_norm.detach().cpu().item())  # Convert to Python float for easier logging
             total_grad_norm = sum(grad_norms)
             print(f"Total grad norm for value head (critic): {total_grad_norm}")
             grad_norms = []
             for param in actor_params:
                 if param.grad is not None:  # Ensure that gradient exists
                     grad_norm = param.grad.norm()  # Compute the L2 norm of the gradient
-                    grad_norms.append(grad_norm.item())  # Convert to Python float for easier logging
+                    grad_norms.append(grad_norm.detach().cpu().item())  # Convert to Python float for easier logging
             total_grad_norm = sum(grad_norms)
             print(f"Total grad norm for policy head (actor): {total_grad_norm}")
             grad_norms = []
             for param in backbone_params:
                 if param.grad is not None:  # Ensure that gradient exists
                     grad_norm = param.grad.norm()  # Compute the L2 norm of the gradient
-                    grad_norms.append(grad_norm.item())  # Convert to Python float for easier logging
+                    grad_norms.append(grad_norm.detach().cpu().item())  # Convert to Python float for easier logging
             total_grad_norm = sum(grad_norms)
             print(f"Total grad norm for backbone: {total_grad_norm}")
-            print(values)
-            print(rewards)
+            print(values[:3])
+            print(rewards[:3])
 
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
-                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{20600+epoch+1}_noisy_random.pth')
+                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_checkpoint_{62200+epoch+1}_explore_random.pth')
                 
 
             # garbage collect
@@ -491,7 +495,7 @@ class Shobu_MCTS_RL:
             epoch += 1
 
         # save final model
-        torch.save(model.state_dict(), 'mcts_checkpoints_696/mcts_final_v2.pth')
+        torch.save(model.state_dict(), 'mcts_checkpoints_696/mcts_final.pth')
 
 
     # simultaneous simulation and training
@@ -523,7 +527,7 @@ class Shobu_MCTS_RL:
         model.to(self.device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
-        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{20600}_noisy_random.pth', map_location=self.device))
+        model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_checkpoint_{62200}_explore_random.pth', map_location=self.device))
         # share model memory
         model.share_memory()
 
