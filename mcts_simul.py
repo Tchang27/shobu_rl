@@ -134,7 +134,7 @@ class MCTree:
             output = self.model(state_tensor)
             evaluation = output['q_value'].item()
             # root needs softmax temp of 1.03
-            if len(path) < 2:
+            if (len(path) < 2) and noise:
                 output["passive"]["position"] = output["passive"]["position"]/1.03
                 output["passive"]["direction"] = output["passive"]["direction"]/1.03
                 output["passive"]["distance"] = output["passive"]["distance"]/1.03

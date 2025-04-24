@@ -136,8 +136,8 @@ class MCTSAgent(Agent):
 				was_moved = True
 			mcts = MCTree(self.model, board, self.device)
 			rollout = mcts.search(800, noise=False)
-			#print(f'model thinks it has {((rollout.total_reward / rollout.num_visits + 1) * 50):.1f}% chance of winning')
-			if half_ply < 2:
+			print(f'model thinks it has {((rollout.total_reward / rollout.num_visits + 1) * 50):.1f}% chance of winning')
+			if half_ply < 0:
 				move = rollout.sample_move(float('inf'))
 			else:
 				move = rollout.sample_move(0)
@@ -177,7 +177,7 @@ class MCTSConvAgent(Agent):
 				was_moved = True
 			mcts = MCTree_Conv(self.model, board, self.device)
 			rollout = mcts.search(800, noise=False)
-			if half_ply < 2:
+			if half_ply < 0:
 				move = rollout.sample_move(float('inf'))
 			else:
 				move = rollout.sample_move(0)
