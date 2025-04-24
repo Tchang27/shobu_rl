@@ -21,7 +21,7 @@ MAX_GAME_LEN = 128
 
 
 class MCNode:
-    def __init__(self, prior: float, player: Player):
+    def __init__(self, prior: float, player: Player, cpuct: float=1.0):
         self.num_visits = 0
         self.total_reward = 0 # We want the average reward over time, total_reward / num_visits, so we save both separately
         self.children = {}
@@ -30,6 +30,7 @@ class MCNode:
         self.state: Shobu = None
         self.player = player
         self.value = None
+        self.cpuct = cpuct
 
     def ucb(self, child: "MCNode") -> float:
         """
@@ -65,15 +66,15 @@ class MCNode:
         exploration = priors * sqrt_parent_visits / (1 + visits)
 
         # UCB scores
-        ucb_scores = q_values + 1.1*exploration
+        ucb_scores = q_values + self.cpuct*exploration
 
         # Find max
         max_idx = np.argmax(ucb_scores)
         return moves[max_idx], children[max_idx]
 
-    def expansion(self, candidate_moves: dict[ShobuMove, torch.tensor]):
+    def expansion(self, candidate_moves: dict[ShobuMove, torch.tensor], cpuct: float=1.0):
         for move, probability in candidate_moves.items():
-            self.children[move] = MCNode(probability.item(), Player(not self.player.value))
+            self.children[move] = MCNode(probability.item(), Player(not self.player.value), cpuct)
         self.is_expanded = True
 
     def sample_move(self, tau: float) -> ShobuMove:
@@ -101,11 +102,12 @@ class MCNode:
 class MCTree:
     # init
     ## model (policy + value)
-    def __init__(self, model: Shobu_MCTS, starting_state: Shobu, device: torch.device):
+    def __init__(self, model: Shobu_MCTS, starting_state: Shobu, device: torch.device, cpuct: float=1.0):
         self.root = MCNode(0, starting_state.next_mover)
         self.root.state = starting_state
         self.model = model
         self.device = device
+        self.cpuct = cpuct
 
     def __del__(self):
         self.root = None
@@ -165,14 +167,14 @@ class MCTree:
         else:
             evaluation, move_to_probability = self._value_and_policy(path_to_leaf, noise)
             cur_node.value = evaluation
-            cur_node.expansion(move_to_probability)
+            cur_node.expansion(move_to_probability, self.cpuct)
 
         self.backprop(evaluation, path_to_leaf, cur_node.player)
 
     def search(self, num_simulations: int, noise=True) -> MCNode:
         value, move_to_probability = self._value_and_policy([self.root], noise)
         self.root.value = value
-        self.root.expansion(move_to_probability)
+        self.root.expansion(move_to_probability, self.cpuct)
         for _ in range(num_simulations):
             self.simulation(noise)
         return self.root
@@ -231,7 +233,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
             game_end_reward = 1 # cuz last transition was prev player who made a move
             break
         
-        mcts = MCTree(model, board, device)
+        mcts = MCTree(model, board, device, cpuct=1.1)
         # playout randomization
         full_search = False
         if np.random.random() < 0.75:

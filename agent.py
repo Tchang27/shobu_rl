@@ -115,12 +115,13 @@ class MCTSAgent(Agent):
 	A `MCTSAgent` is a bot player which uses a trained MCTS model
 	to select moves.
 	"""
-	def __init__(self, checkpoint_path: str, name=None):
+	def __init__(self, checkpoint_path: str, cpuct=1.0, name=None):
 		self.device = torch.device("cpu")   
 		self.model = Shobu_MCTS(self.device)
 		self.model.to(self.device)
 		self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
 		self.model.eval()
+		self.cpuct = cpuct
 		if name is None:
 			# choose a sensible default
 			self.agent_name = checkpoint_path.split('/')[-1].split('.')[0]
@@ -134,7 +135,7 @@ class MCTSAgent(Agent):
 			if board.next_mover == Player.WHITE:
 				board.flip()
 				was_moved = True
-			mcts = MCTree(self.model, board, self.device)
+			mcts = MCTree(self.model, board, self.device, self.cpuct)
 			rollout = mcts.search(800, noise=False)
 			print(f'model thinks it has {((rollout.total_reward / rollout.num_visits + 1) * 50):.1f}% chance of winning')
 			if half_ply < 0:
