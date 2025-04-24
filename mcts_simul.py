@@ -135,8 +135,10 @@ class MCTree:
             evaluation = output['q_value'].item()
             # root needs softmax temp of 1.03
             if len(path) < 2:
-                output["passive"] = output["passive"]/1.03
-                output["aggressive"] = output["aggressive"]/1.03
+                output["passive"]["position"] = output["passive"]["position"]/1.03
+                output["passive"]["direction"] = output["passive"]["direction"]/1.03
+                output["passive"]["distance"] = output["passive"]["distance"]/1.03
+                output["aggressive"]["position"] = output["aggressive"]["position"]/1.03
             move_to_probability = get_joint_logits(path[-1].state, output, noise=noise)
         return evaluation, move_to_probability
 
