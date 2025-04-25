@@ -17,7 +17,7 @@ import psutil
 from shobu import ShobuMove, Shobu, Player
 import random
 
-MAX_GAME_LEN = 128
+MAX_GAME_LEN = 64
 
 
 class MCNode:
@@ -65,7 +65,7 @@ class MCNode:
         exploration = priors * sqrt_parent_visits / (1 + visits)
 
         # UCB scores
-        ucb_scores = q_values + exploration
+        ucb_scores = q_values + 1.1*exploration
 
         # Find max
         max_idx = np.argmax(ucb_scores)
@@ -129,8 +129,15 @@ class MCTree_Conv:
         
         with torch.no_grad():
             output = self.model(state_tensor)
-            evaluation = output['q_value'].item()
-            move_to_probability = get_joint_logits_fromconv(path[-1].state, output, noise=noise)
+            win_prob = torch.softmax(output['q_value'], dim=1).squeeze()
+            evaluation = win_prob[2].item() - win_prob[0].item() # l,d,w == 0,1,2
+            if (len(path) < 2) and noise:
+                # root needs softmax temp of 1.1
+                output["passive"]["position"] = output["passive"]["position"]/1.1
+                output["passive"]["direction"] = output["passive"]["direction"]/1.1
+                output["passive"]["distance"] = output["passive"]["distance"]/1.1
+                output["aggressive"]["position"] = output["aggressive"]["position"]/1.1
+            move_to_probability = get_joint_logits(path[-1].state, output, noise=noise)
         return evaluation, move_to_probability
 
     def simulation(self, noise=True):
@@ -187,9 +194,7 @@ def temperature_scheduler(epoch_no, move_no):
     but generally temperature should decrease over time
     """
     move_no = (move_no) // 2
-    if move_no < 1:
-        return float('inf')
-    elif move_no < 3:
+    if move_no < 3:
         return 3
     elif move_no < 5:
         return 1
@@ -205,6 +210,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         board = Shobu.starting_position()
     else:
         board = generate_board()
+        start_from_random = True
     generated_training_data = []
     num_moves = 0
     game_end_reward = None
@@ -223,9 +229,9 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         # playout randomization
         full_search = False
         if np.random.random() < 0.75:
-            rollout = mcts.search(50, noise=False)
+            rollout = mcts.search(100, noise=False)
         else:
-            rollout = mcts.search(400, noise=True)
+            rollout = mcts.search(600, noise=True)
             full_search = True
         del mcts
         _sum_pi = sum([child.num_visits for child in rollout.children.values()])
@@ -274,7 +280,8 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
     generated_training_data_with_rewards = []
     for board, pi, full_search in reversed(generated_training_data):
         if full_search:
-            generated_training_data_with_rewards.append((board, pi, game_end_reward))
+            reward_label = game_end_reward+1 # l,d,w == 0,1,2
+            generated_training_data_with_rewards.append((board, pi, reward_label))
         game_end_reward *= -1
 
     # Push entire game history into ReplayMemory
@@ -291,11 +298,11 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
             
 #### MULTIPROC TRAINING+SIMUL ####            
 MINIBATCH_SIZE = 256
-POOL_SIZE = 30
-TRAINER_SIZE = 1
+POOL_SIZE = 61
+TRAINER_SIZE = 2
 WINDOW_SIZE = 50000 # TODO tune this
-WARMUP = 30000
-START_PROB = 0.2
+WARMUP = 15000
+START_PROB = 0.5
         
 # worker process for simulating game        
 def pickled_play_game(shared_model, buffer, lock, device, seed):
@@ -356,11 +363,11 @@ class Shobu_MCTS_RL:
             p for p in model.parameters() 
             if (not any(p is cp for cp in critic_params)) and (not any(p is bp for bp in backbone_params))
         ]  # All other params (policy heads)
-        opt = torch.optim.AdamW([
-            {'params': actor_params, 'lr': 6e-5},
-            {'params': backbone_params, 'lr': 6e-5},
-            {'params': critic_params, 'lr': 6e-5}
-        ], amsgrad=True, weight_decay=3e-5)
+        opt = torch.optim.SGD([
+            {'params': actor_params, 'lr': 2e-5},
+            {'params': backbone_params, 'lr': 2e-5},
+            {'params': critic_params, 'lr': 2e-5}
+        ], momentum=0.9)
         
         tot1 = time.time()
         # warm up period
@@ -388,39 +395,45 @@ class Shobu_MCTS_RL:
             batch = Transition_MCTS(*zip(*minibatch))
             boards = batch.board
             states = torch.concatenate(batch.state)
-            rewards = torch.tensor(np.stack(batch.reward), device=self.device, dtype=torch.float32)
+            rewards = torch.tensor(np.stack(batch.reward), device=self.device, dtype=torch.long)
             mcts_dist = np.stack(batch.mcts_dist)
             
             ### model output ###
             output = model(states)
             
             ### value loss ###
-            values = output['q_value'].squeeze()
-            value_loss = F.mse_loss(values, rewards)
+            values = output['q_value']
+            value_loss = F.cross_entropy(values, rewards, reduction="sum")
 
             ### policy loss ###
-            policy_losses = []
-            p_pos = output["passive"]
-            a_pos = output["aggressive"]
+            policy_loss = 0
+            p_pos = output["passive"]["position"]
+            p_dir = output["passive"]["direction"]
+            p_dist = output["passive"]["distance"]
+            a_pos = output["aggressive"]["position"]
             i = 0
             for board, pi_dict in zip(boards, mcts_dist):
                 po = {
-                    "passive": p_pos[i],
-                    "aggressive": a_pos[i]
+                    "passive": {
+                        "position": p_pos[i].unsqueeze(0),
+                        "direction": p_dir[i].unsqueeze(0),
+                        "distance": p_dist[i].unsqueeze(0),
+                    },
+                    "aggressive": {
+                        "position": a_pos[i].unsqueeze(0)
+                    }
                 }
-                move_to_logit = get_joint_logits_fromconv(board, po, logits=True)
+                move_to_logit = get_joint_logits(board, po, logits=True)
                 policy = torch.stack([move_to_logit[k] for k in move_to_logit.keys()])
                 pi_dist = torch.tensor([pi_dict[k] for k in pi_dict.keys()], device=self.device, dtype=torch.float32)
-                policy_losses.append(-torch.sum(pi_dist * F.log_softmax(policy, dim=-1))) 
-                #policy_losses.append(F.kl_div(F.log_softmax(policy, dim=-1), pi_dist, reduction="sum"))
+                policy_loss += -torch.sum(pi_dist * F.log_softmax(policy, dim=-1))
                 i += 1
-            policy_loss = torch.mean(torch.stack(policy_losses))
 
             ### optimize ###
             loss = 1.5*value_loss + policy_loss
             opt.zero_grad()
             loss.backward()
-            total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
+            total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=2500.0).detach().cpu().item()
             # prevent workers from loading weird state dicts
             with lock:
                 opt.step()
@@ -443,39 +456,36 @@ class Shobu_MCTS_RL:
             for param in critic_params:
                 if param.grad is not None:  # Ensure that gradient exists
                     grad_norm = param.grad.norm()  # Compute the L2 norm of the gradient
-                    grad_norms.append(grad_norm.item())  # Convert to Python float for easier logging
+                    grad_norms.append(grad_norm.detach().cpu().item())  # Convert to Python float for easier logging
             total_grad_norm = sum(grad_norms)
             print(f"Total grad norm for value head (critic): {total_grad_norm}")
             grad_norms = []
             for param in actor_params:
                 if param.grad is not None:  # Ensure that gradient exists
                     grad_norm = param.grad.norm()  # Compute the L2 norm of the gradient
-                    grad_norms.append(grad_norm.item())  # Convert to Python float for easier logging
+                    grad_norms.append(grad_norm.detach().cpu().item())  # Convert to Python float for easier logging
             total_grad_norm = sum(grad_norms)
             print(f"Total grad norm for policy head (actor): {total_grad_norm}")
             grad_norms = []
             for param in backbone_params:
                 if param.grad is not None:  # Ensure that gradient exists
                     grad_norm = param.grad.norm()  # Compute the L2 norm of the gradient
-                    grad_norms.append(grad_norm.item())  # Convert to Python float for easier logging
+                    grad_norms.append(grad_norm.detach().cpu().item())  # Convert to Python float for easier logging
             total_grad_norm = sum(grad_norms)
             print(f"Total grad norm for backbone: {total_grad_norm}")
-            print(values)
-            print(rewards)
+            print(values[:3])
+            print(rewards[:3])
             
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
-                torch.save(model.state_dict(), f'mcts_checkpoints_696/mcts_conv_checkpoint_{epoch+1}.pth')
+                torch.save(model.state_dict(), f'mcts_checkpoint_9128/mcts_conv_checkpoint_{epoch+1}.pth')
 
             # garbage collect
             gc.collect()
 
             # update epoch
             epoch += 1
-
-        # save final model
-        torch.save(model.state_dict(), 'mcts_checkpoints_696/mcts_conv_final.pth')
             
                 
     # simultaneous simulation and training
@@ -507,7 +517,7 @@ class Shobu_MCTS_RL:
         model.to(self.device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
-        #model.load_state_dict(torch.load(f'mcts_checkpoints_696/mcts_conv_checkpoint_{400}.pth', map_location=self.device))
+        #model.load_state_dict(torch.load(f'mcts_checkpoint_9128/mcts_conv_checkpoint_{100}.pth', map_location=self.device))
         # share model memory
         model.share_memory()
                 

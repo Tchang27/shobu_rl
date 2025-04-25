@@ -76,7 +76,7 @@ def do_board(predefined_board_name):
 	else:
 		print(f"Unrecognized board name: {name}")
 		return
-	tree = MCTree(model, board, device)
+	tree = MCTree(model, board, device, cpuct=1.1)
 	nodes = [tree.root]
 	moves = []
 	cur_node = 0
@@ -310,7 +310,7 @@ def repl(checkpoint_path, initial_position=None, first_mover="black"):
 		global tree, nodes, cur_node, moves
 		with open(initial_position, "r") as file:
 				board = Shobu.from_str(file.read())
-		tree = MCTree(model, board, device)
+		tree = MCTree(model, board, device, cpuct=1.1)
 		nodes = [tree.root]
 		moves = []
 		cur_node = 0
