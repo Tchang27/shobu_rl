@@ -184,25 +184,34 @@ class MCTree_Conv:
             if node.player == cur_player:
                 node.total_reward += evaluation
             else:
-                node.total_reward -= evaluation
+                node.total_reward -= evaluation        
 
 
 #### WORKER FUNCTIONS ####
+def raw_policy_sample(model, board, device):
+    state_tensor = torch.tensor(board.as_matrix(), device=device, dtype=torch.float32).unsqueeze(0)
+    with torch.no_grad():
+        output = model(state_tensor)
+    move_to_probability = get_joint_logits(board, output, noise=False)
+    potential_moves = [key for key in move_to_probability.keys()]
+    policy = torch.stack([move_to_probability[k] for k in move_to_probability.keys()])
+    return np.random.choice(potential_moves, p=policy.numpy())
+    
+    
 def temperature_scheduler(epoch_no, move_no):
     """
     this is just a straight up guess, can try something diff too
     but generally temperature should decrease over time
     """
     move_no = (move_no) // 2
-    if move_no < 3:
-        return 3
-    elif move_no < 5:
-        return 1
-    elif move_no >= 10:
+    if move_no < 1:
+        return float('inf')
+    elif move_no < epoch_no:
+        return -1
+    elif move_no >= epoch_no+10:
         return 0
     else:
-        return (10 - move_no) / 5
-
+        return (epoch_no+10 - move_no) / 10
     
 def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):    
     start_from_random = False
@@ -214,6 +223,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
     generated_training_data = []
     num_moves = 0
     game_end_reward = None
+    random_moves = np.random.geometric(p=0.4, size=1)[0]+1
     while True:
 
         ######
@@ -231,7 +241,7 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         if np.random.random() < 0.75:
             rollout = mcts.search(100, noise=False)
         else:
-            rollout = mcts.search(600, noise=True)
+            rollout = mcts.search(800, noise=True)
             full_search = True
         del mcts
         _sum_pi = sum([child.num_visits for child in rollout.children.values()])
@@ -247,8 +257,15 @@ def play_game(model, device, memory: ReplayMemory_MCTS, epoch: int):
         if start_from_random:
             tau = 0 
         else:
-            tau = temperature_scheduler(epoch, num_moves)
-        selected_move = rollout.sample_move(tau)
+            tau = temperature_scheduler(random_moves, num_moves)
+        
+        # apply raw policy sampling or temperature selection from playout
+        if tau == -1:
+            selected_move = raw_policy_sample(model, board, device)
+        else:
+            selected_move = rollout.sample_move(tau)
+        
+        # apply move
         board = board.apply(selected_move)
 
         # Check winner
@@ -301,7 +318,7 @@ MINIBATCH_SIZE = 256
 POOL_SIZE = 61
 TRAINER_SIZE = 2
 WINDOW_SIZE = 50000 # TODO tune this
-WARMUP = 15000
+WARMUP = 35000
 START_PROB = 0.5
         
 # worker process for simulating game        
@@ -364,9 +381,9 @@ class Shobu_MCTS_RL:
             if (not any(p is cp for cp in critic_params)) and (not any(p is bp for bp in backbone_params))
         ]  # All other params (policy heads)
         opt = torch.optim.SGD([
-            {'params': actor_params, 'lr': 2e-5},
-            {'params': backbone_params, 'lr': 2e-5},
-            {'params': critic_params, 'lr': 2e-5}
+            {'params': actor_params, 'lr': 6e-5},
+            {'params': backbone_params, 'lr': 6e-5},
+            {'params': critic_params, 'lr': 6e-5}
         ], momentum=0.9)
         
         tot1 = time.time()
@@ -479,7 +496,7 @@ class Shobu_MCTS_RL:
 
             # save checkpoints
             if ((epoch+1)%100) == 0:
-                torch.save(model.state_dict(), f'mcts_checkpoint_9128/mcts_conv_checkpoint_{epoch+1}.pth')
+                torch.save(model.state_dict(), f'mcts_checkpoint_9128/mcts_conv_checkpoint_{19400+epoch+1}.pth')
 
             # garbage collect
             gc.collect()
@@ -517,7 +534,7 @@ class Shobu_MCTS_RL:
         model.to(self.device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         # load from previous checkpoint
-        #model.load_state_dict(torch.load(f'mcts_checkpoint_9128/mcts_conv_checkpoint_{100}.pth', map_location=self.device))
+        model.load_state_dict(torch.load(f'mcts_checkpoint_9128/mcts_conv_checkpoint_{19400}.pth', map_location=self.device))
         # share model memory
         model.share_memory()
                 
