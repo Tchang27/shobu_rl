@@ -30,8 +30,8 @@ if __name__ == '__main__':
     
 	play_game(
 		#UserAgent(),
-		MCTSConvAgent("model_weights/mcts_conv_checkpoint_21800.pth"),
-		MCTSAgent("model_weights/mcts_checkpoint_26100_noisy_random.pth"),
+		MCTSConvAgent("model_weights/mcts_conv_checkpoint_32000.pth"),
+		MCTSAgent("model_weights/mcts_checkpoint_30400_noisy_random.pth"),
 		#MCTSAgent("model_weights/mcts_checkpoint_63400_explore_random.pth",cpuct=1.1),
 		print_info = True
 	)
