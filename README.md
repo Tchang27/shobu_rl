@@ -1,3 +1,11 @@
+# shobu_ui
+1. Make sure you have npm installed, and python packages `flask`, `flask-cors`, and
+`gunicorn`.
+2. We need to compile the UI. `cd shobu_ui`, and `npm i`. Then `npm run build`
+3. `cd ..` back out to the root of the repo and run `gunicorn app:app`. (make sure you have the checkpoints
+also in the root dir, or edit `app.py` to fix those paths)
+4. For production, can process requests in parallel via `gunicorn --workers=16 app:app -b 0.0.0.0:1470`.
+
 # shobu_rl
 
 ## Resources

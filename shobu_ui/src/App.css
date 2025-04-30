@@ -1,0 +1,133 @@
+* {
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.App {
+  text-align: center;
+  background-color: #16161D;
+  height: 100vh;
+  color: #DCD7BA;
+  padding-top: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+h1 {
+  margin: 0;
+  margin-bottom: 30px;
+}
+
+#board-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 800px;
+  background-color: #2A2A37;
+  border-radius: 0.75%;
+}
+
+.board > table {
+    border-collapse: separate;
+}
+
+.subboard.dark {
+  background-color: #ae9564;
+  color: #ae9564;
+}
+
+.subboard.light {
+  background-color: #C8C093;
+  color: #C8C093;
+}
+
+.subboard td {
+  border-radius: 5%;
+  height: 25%;
+  width: 25%;
+}
+
+.subboard.dark td {
+  background-color: #C0A36E;
+}
+
+.subboard.light td {
+  background-color: #d2cca6;
+}
+
+.cornerborder {
+  background: linear-gradient(135deg, #C34043 13%, transparent 12%, transparent 88%, #C34043 87%),
+    linear-gradient(45deg, #C34043 13%, transparent 12%, transparent 88%, #C34043 87%);
+  opacity: 80%;
+}
+
+.cornerborder2 {
+  background: linear-gradient(135deg, #2B3328 13%, transparent 12%, transparent 88%, #2B3328 87%),
+    linear-gradient(45deg, #2B3328 13%, transparent 12%, transparent 88%, #2B3328 87%);
+  opacity: 80%;
+}
+
+#entry-box {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: 100vw;
+  background-color: #16161D;
+}
+
+#entry-options {
+  width: 100%;
+  max-width: 500px;
+  max-height: 600px;
+  padding: 30px;
+  text-align: left;
+  overflow: auto;
+}
+
+.entry-btn {
+  flex-grow: 1;
+  text-align: center;
+  margin: 10px;
+  padding: 20px;
+  border: 1px solid #DCD7BA;
+  cursor: pointer;
+  font-size: 20px;
+  border-radius: 5px;
+}
+
+.entry-btn.selected {
+  background-color: #DCD7BA;
+  color: #16161D;
+  border: 1px solid #DCD7BA;
+}
+
+.entry-btn.selected {
+  background-color: #DCD7BA;
+  color: #16161D;
+  border: 1px solid #DCD7BA;
+}
+
+.entry-submit-btn {
+  text-align: center;
+  margin: 10px;
+  padding: 20px;
+  background-color: #7AA89F;
+  color: #16161D;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 20px;
+  border-radius: 5px;
+  margin-bottom: 80px;
+}
+
+body {
+  overflow: hidden;
+}
