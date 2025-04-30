@@ -1,12 +1,9 @@
-# shobu_ui
-1. Make sure you have npm installed, and python packages `flask`, `flask-cors`, and
-`gunicorn`.
-2. We need to compile the UI. `cd shobu_ui`, and `npm i`. Then `npm run build`
-3. `cd ..` back out to the root of the repo and run `gunicorn app:app`. (make sure you have the checkpoints
-also in the root dir, or edit `app.py` to fix those paths)
-4. For production, can process requests in parallel via `gunicorn --workers=16 app:app -b 0.0.0.0:1470`.
+# ShabuShabu:  Learning Shobu By Self-Play Through Reinforcement Learning
 
-# shobu_rl
+## Outline of Repo
+- `CS1470 Final Presentation`: PDF of capstone presentation slides
+- `CS1470 Final Report`: PDF of final report
+- `CS1470_Final_Outline.pdf`: PDF of outline
 
 ## Resources
 PPO
@@ -21,7 +18,15 @@ MCTS
 - https://arxiv.org/pdf/1902.10565
 - https://jonathan-hui.medium.com/monte-carlo-tree-search-mcts-in-alphago-zero-8a403588276a
 
-## Progress/design choices
+## shobu_ui
+1. Make sure you have npm installed, and python packages `flask`, `flask-cors`, and
+`gunicorn`.
+2. We need to compile the UI. `cd shobu_ui`, and `npm i`. Then `npm run build`
+3. `cd ..` back out to the root of the repo and run `gunicorn app:app`. (make sure you have the checkpoints
+also in the root dir, or edit `app.py` to fix those paths)
+4. For production, can process requests in parallel via `gunicorn --workers=16 app:app -b 0.0.0.0:1470`.
+
+<!-- ## Progress/design choices
 - PPO
     - Board representation decisions
     - Model output decisions
@@ -39,4 +44,4 @@ MCTS
     - Explorer for debugging mcts/model
     - Determining optimal rollout value during training
     - Exploration bonus hyperparameter for early exploration when values are poor
-    - Loss function weighting to priortize value function
+    - Loss function weighting to priortize value function -->

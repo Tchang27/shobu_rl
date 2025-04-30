@@ -466,14 +466,12 @@ class Shobu_MCTS_Conv(nn.Module):
             # Residual blocks
             ResidualBlock2D(128, 128, kernel=3),
             ResidualBlock2D(128, 128, kernel=3),
+            ResidualBlock2D_Pooling(128, 128, kernel=3),
             ResidualBlock2D(128, 128, kernel=3),
             ResidualBlock2D(128, 128, kernel=3),
             ResidualBlock2D_Pooling(128, 128, kernel=3),
             ResidualBlock2D(128, 128, kernel=3),
             ResidualBlock2D(128, 128, kernel=3),
-            ResidualBlock2D(128, 128, kernel=3),
-            ResidualBlock2D(128, 128, kernel=3),
-            ResidualBlock2D_Pooling(128, 128, kernel=3),
         )
         
         # policy head
