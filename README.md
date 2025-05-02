@@ -2,7 +2,7 @@
 
 ## Outline of Repo
 - `CS1470 Final Presentation`: PDF of capstone presentation slides
-- `CS1470 Final Report`: PDF of final report
+- `ShabuShabu_Final_Paper`: PDF of final report
 - `CS1470_Final_Outline.pdf`: PDF of outline
 
 ## Resources
